@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --surface2: #1a1a26;
+  --accent: #c9a84c;
+  --accent2: #e8c97a;
+  --text: #f0ece0;
+  --muted: #8a8070;
+  --border: rgba(201,168,76,0.2);
+  --danger: #e05555;
+}
+
+body {
+  font-family: 'Tajawal', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  direction: rtl;
+  min-height: 100vh;
+}
+
+a { text-decoration: none; color: inherit; }
+
+button { font-family: 'Tajawal', sans-serif; cursor: pointer; }
+
+input, textarea, select {
+  font-family: 'Tajawal', sans-serif;
+  outline: none;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  width: 100%;
+  font-size: 1rem;
+  transition: border-color 0.3s;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #0a0a0f;
+  border: none;
+  padding: 0.8rem 2rem;
+  font-weight: 700;
+  font-size: 1rem;
+  border-radius: 6px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(201,168,76,0.3);
+}
+
+.btn-outline {
+  background: none;
+  color: var(--accent);
+  border: 1.5px solid var(--accent);
+  padding: 0.7rem 1.5rem;
+  font-weight: 700;
+  border-radius: 6px;
+  transition: all 0.3s;
+}
+.btn-outline:hover { background: rgba(201,168,76,0.1); }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+.card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+
+.page-wrapper {
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 6rem 1.5rem 3rem;
+}
+
+.section-title {
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-weight: 300;
+  margin-bottom: 0.5rem;
+}
+.section-title span { color: var(--accent); }
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.loading {
+  text-align: center;
+  padding: 4rem;
+  color: var(--muted);
+  font-size: 1.1rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  background: rgba(201,168,76,0.15);
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
