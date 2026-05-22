@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
-const API = "http://192.168.0.145:5000";
+const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
 
 export default function ARViewer({ painting, onClose }) {
   const canvasRef = useRef(null);

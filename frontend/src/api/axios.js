@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://192.168.0.145:5000/api',
+  baseURL: `${import.meta.env.VITE_API_URL || 'http://192.168.0.145:5000'}/api`,
 });
 
 // أضف التوكن تلقائياً لكل طلب
