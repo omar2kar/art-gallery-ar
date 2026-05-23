@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../api/axios";
-import ARViewer from "../components/ARViewer";
+import ARViewer from "../components/ARViewerXR";
 
 const API = "http://localhost:5000";
 
