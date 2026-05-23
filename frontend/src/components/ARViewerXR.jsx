@@ -155,7 +155,21 @@ export default function ARViewerXR({ painting, onClose }) {
       setError("");
 
       const viewerSpace = await session.requestReferenceSpace("viewer");
-      const localSpace = await session.requestReferenceSpace("local");
+
+      // الفضاء المرجعي للعالم: نعيد استخدام ما أنشأته three (متوافق مع الجهاز تلقائياً).
+      // وإن لم يتوفّر، نجرّب أنواعاً متعددة بالترتيب بدل الاعتماد على نوع واحد قد لا يُدعم.
+      let localSpace = renderer.xr.getReferenceSpace();
+      if (!localSpace) {
+        for (const type of ["local-floor", "local", "unbounded", "viewer"]) {
+          try {
+            localSpace = await session.requestReferenceSpace(type);
+            break;
+          } catch {
+            /* جرّب التالي */
+          }
+        }
+      }
+
       const hitSource = await session.requestHitTestSource({
         space: viewerSpace,
       });
