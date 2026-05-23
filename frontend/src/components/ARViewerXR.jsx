@@ -13,6 +13,7 @@ import ARViewer from "./ARViewer"; // النسخة القديمة (Canvas) — �
 
 const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
 const ACCENT = 0xc9a84c; // نفس لون الإطار الذهبي في مشروعك
+const VERSION = "AR v3"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
 
 export default function ARViewerXR({ painting, onClose }) {
   const overlayRef = useRef(null);
@@ -150,6 +151,8 @@ export default function ARViewerXR({ painting, onClose }) {
         optionalFeatures: ["anchors", "light-estimation", "dom-overlay"],
         domOverlay: { root: overlayRef.current },
       });
+      // نطلب من three استخدام local-floor (مدعوم على أغلب أجهزة أندرويد ARCore)
+      renderer.xr.setReferenceSpaceType("local-floor");
       await renderer.xr.setSession(session);
       setRunning(true);
       setError("");
@@ -169,6 +172,7 @@ export default function ARViewerXR({ painting, onClose }) {
           }
         }
       }
+      if (!localSpace) localSpace = viewerSpace; // ملاذ أخير حتى لا ننهار
 
       const hitSource = await session.requestHitTestSource({
         space: viewerSpace,
@@ -428,6 +432,16 @@ export default function ARViewerXR({ painting, onClose }) {
           >
             ✕ إغلاق
           </button>
+
+          <p
+            style={{
+              color: "rgba(255,255,255,0.25)",
+              fontSize: "0.7rem",
+              marginTop: "1rem",
+            }}
+          >
+            {VERSION}
+          </p>
         </div>
       )}
 
