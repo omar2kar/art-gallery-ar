@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../api/axios";
 import PaintingCard from "../components/PaintingCard";
-import ARViewer from "../components/ARViewer";
+import ARViewer from "../components/ARViewerXR";
 
 export default function Home() {
   const [paintings, setPaintings] = useState([]);
