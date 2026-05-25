@@ -1,51 +1,65 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const API = "http://192.168.0.145:5000";
+// إصلاح مهم: استخدام متغيّر البيئة بدل IP ثابت — وإلا تُحجب الصور على Vercel (Mixed Content)
+const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
 
 export default function PaintingCard({ painting, onARClick }) {
   const navigate = useNavigate();
-  const imgSrc = painting.image
-    ? `${API}/uploads/${painting.image}`
-    : `https://picsum.photos/seed/${painting.id}/400/300`;
+  const [hover, setHover] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  const imgSrc =
+    painting.image && !imgError
+      ? `${API}/uploads/${painting.image}`
+      : `https://picsum.photos/seed/${painting.id}/400/300`;
+
+  const goDetail = () => navigate(`/painting/${painting.id}`);
 
   return (
-    <div className="card">
+    <div
+      className="card"
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
       <div style={{ position: "relative", overflow: "hidden" }}>
         <img
           src={imgSrc}
           alt={painting.title}
+          onError={() => setImgError(true)}
           style={{
             width: "100%",
             aspectRatio: "4/3",
             objectFit: "cover",
             display: "block",
             cursor: "pointer",
+            transition: "transform 0.4s ease",
+            transform: hover ? "scale(1.05)" : "scale(1)",
           }}
-          onClick={() => navigate(`/painting/${painting.id}`)}
+          onClick={goDetail}
         />
-        {/* Hover overlay */}
+        {/* Hover overlay — يُتحكَّم به من حالة البطاقة ليعمل على اللمس أيضاً */}
         <div
           style={{
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(to top, rgba(10,10,15,0.9), transparent)",
+              "linear-gradient(to top, rgba(10,10,15,0.92), transparent 60%)",
             display: "flex",
             alignItems: "flex-end",
             justifyContent: "center",
             padding: "1rem",
-            opacity: 0,
+            opacity: hover ? 1 : 0,
             transition: "opacity 0.3s",
+            pointerEvents: hover ? "auto" : "none",
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = 1)}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = 0)}
         >
           <button
             className="btn-primary"
             style={{ padding: "0.5rem 1.5rem", fontSize: "0.85rem" }}
-            onClick={() => navigate(`/painting/${painting.id}`)}
+            onClick={goDetail}
           >
-            عرض التفاصيل
+            Detayları Gör
           </button>
         </div>
       </div>
@@ -83,9 +97,9 @@ export default function PaintingCard({ painting, onARClick }) {
               fontSize: "1.05rem",
             }}
           >
-            {Number(painting.price).toLocaleString("ar-SA")} ريال
+            {Number(painting.price).toLocaleString("tr-TR")} ₺
           </span>
-          <span className="badge">{painting.style}</span>
+          {painting.style && <span className="badge">{painting.style}</span>}
         </div>
       </div>
 
@@ -109,7 +123,7 @@ export default function PaintingCard({ painting, onARClick }) {
           }}
           onClick={() => onARClick(painting)}
         >
-          📷 عرض على الجدار
+          📷 Duvarda Görüntüle
         </button>
         <span style={{ color: "var(--muted)", fontSize: "0.8rem" }}>
           {painting.year}

@@ -18,7 +18,7 @@ body {
   font-family: 'Tajawal', sans-serif;
   background: var(--bg);
   color: var(--text);
-  direction: rtl;
+  direction: ltr;
   min-height: 100vh;
 }
 

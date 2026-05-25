@@ -13,7 +13,7 @@ import ARViewer from "./ARViewer"; // النسخة القديمة (Canvas) — �
 
 const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
 const ACCENT = 0xc9a84c; // نفس لون الإطار الذهبي في مشروعك
-const VERSION = "AR v7"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
+const VERSION = "AR v8"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
 
 export default function ARViewerXR({ painting, onClose }) {
   const overlayRef = useRef(null);
@@ -32,6 +32,7 @@ export default function ARViewerXR({ painting, onClose }) {
   const placedRef = useRef(false);
   const showFrameRef = useRef(true);
   const debugRef = useRef(null); // عنصر يعرض تشخيص hit-test حيّاً
+  const scanRef = useRef(null); // عنصر يعرض حالة مسح الغرفة
 
   // ---- 1) فحص دعم WebXR AR على هذا الجهاز ----
   // ملاحظة: لا نرتدّ للنسخة القديمة لمجرد أن isSessionSupported أرجع false،
@@ -231,24 +232,31 @@ export default function ARViewerXR({ painting, onClose }) {
         };
       };
 
-      // يوجّه اللوحة لتلتصق بالسطح:
-      // - على جدار: ظهر اللوحة ملاصق للجدار، ووجهها للخارج (عكس الـ normal)
-      // - على سطح أفقي: تقف عمودية وتواجه المستخدم (كأنها على حامل)
+      // يوجّه اللوحة لتلتصق بالسطح. للوحات الجدران نضمن العمودية التامة:
+      // نُسقط متجه السطح (normal) على المستوى الأفقي ونلغي أي ميل رأسي،
+      // فلا تميل اللوحة أبداً مهما كان ميل السطح المكتشف أو إمساك الهاتف.
       const orientArtwork = (info, camPos) => {
         if (info.isWall) {
-          // اللوحة تواجه الخارج باتجاه الـ normal. محتوى اللوحة على +Z،
-          // لذا نجعل +Z المحلي يحاذي الـ normal.
-          const target = info.pos.clone().add(info.normal);
+          // normal أفقي فقط (نلغي y) → اللوحة عمودية 100%
+          const flatNormal = info.normal.clone();
+          flatNormal.y = 0;
+          if (flatNormal.lengthSq() < 1e-6) {
+            // احتياط نادر: لو فقدنا الاتجاه، اجعلها تواجه المستخدم
+            flatNormal.copy(camPos).sub(info.pos);
+            flatNormal.y = 0;
+          }
+          flatNormal.normalize();
           group.position.copy(info.pos);
-          group.up.copy(_up);
-          group.lookAt(target);
-          // ندفع اللوحة قليلاً للأمام عن الجدار حتى لا تتداخل معه
-          group.position.add(info.normal.clone().multiplyScalar(0.02));
+          // اللوحة (محتواها على +Z) تواجه باتجاه flatNormal
+          const yaw = Math.atan2(flatNormal.x, flatNormal.z);
+          group.rotation.set(0, yaw, 0);
+          // ادفعها قليلاً عن الجدار لتجنّب التداخل
+          group.position.add(flatNormal.multiplyScalar(0.02));
         } else {
           // سطح أفقي: اللوحة عمودية تواجه المستخدم
           const yaw = Math.atan2(camPos.x - info.pos.x, camPos.z - info.pos.z);
           group.position.copy(info.pos);
-          group.position.y += group.userData.halfH || 0; // ترفعها لتقف على السطح
+          group.position.y += group.userData.halfH || 0;
           group.rotation.set(0, yaw, 0);
         }
         group.visible = true;
@@ -319,6 +327,8 @@ export default function ARViewerXR({ painting, onClose }) {
       };
 
       // ── حلقة الرسم ──
+      let wallSeenCount = 0; // كم مرة رأينا جداراً (لقياس جاهزية التتبّع)
+      let floorSeenCount = 0; // كم مرة رأينا سطحاً أفقياً
       renderer.setAnimationLoop((t, xrFrame) => {
         if (xrFrame) {
           if (!placedRef.current) {
@@ -336,18 +346,38 @@ export default function ARViewerXR({ painting, onClose }) {
                 lastIsWall = isWall;
                 reticle.visible = true;
                 reticle.matrix.fromArray(pose.transform.matrix);
-                // لون الحلقة: أخضر للجدار، أصفر للسطح الأفقي
                 reticle.material.color.setHex(isWall ? 0x4ade80 : ACCENT);
+                if (isWall) wallSeenCount++;
+                else floorSeenCount++;
               }
             } else {
               reticle.visible = false;
               currentHit = null;
             }
+
+            // رسالة إرشاد المسح: توجّه المستخدم للطريقة الأنجح (أرضية ← ثم جدار)
+            if (scanRef.current) {
+              let msg;
+              if (isWall && reticle.visible) {
+                msg = "✅ جدار جاهز — انقر لوضع اللوحة";
+                scanRef.current.style.color = "#4ade80";
+              } else if (reticle.visible) {
+                msg = "👇 سطح مكتشف — ارفع الكاميرا تدريجياً نحو الجدار";
+                scanRef.current.style.color = "#e8c45a";
+              } else if (floorSeenCount > 0) {
+                msg = "🔍 حرّك الهاتف ببطء نحو الجدار";
+                scanRef.current.style.color = "#ffffff";
+              } else {
+                msg = "🔍 وجّه الكاميرا نحو الأرضية وحرّكها ببطء لمسح الغرفة";
+                scanRef.current.style.color = "#ffffff";
+              }
+              scanRef.current.textContent = msg;
+            }
+
             if (debugRef.current) {
-              debugRef.current.textContent = `نتائج: ${hits.length} | ${poseOk ? (isWall ? "جدار ✓" : "أفقي") : "—"} | حلقة: ${reticle.visible ? "ظاهرة" : "مخفية"}`;
+              debugRef.current.textContent = `نتائج: ${hits.length} | ${poseOk ? (isWall ? "جدار ✓" : "أفقي") : "—"} | جدران:${wallSeenCount}`;
             }
           } else if (anchor && anchor.anchorSpace) {
-            // تتبّع الـ anchor: نحدّث الموضع والاتجاه معاً ليبقى التثبيت دقيقاً
             const ap = xrFrame.getPose(anchor.anchorSpace, localSpace);
             if (ap) {
               _m.fromArray(ap.transform.matrix);
@@ -629,34 +659,37 @@ export default function ARViewerXR({ painting, onClose }) {
               </div>
             )}
 
-            {/* تلميح وسط الشاشة قبل الوضع */}
+            {/* رسالة إرشاد المسح الديناميكية — ترشد المستخدم خطوة بخطوة */}
             {!placed && (
               <div
                 style={{
                   position: "absolute",
-                  top: "46%",
+                  top: "42%",
                   left: "50%",
                   transform: "translate(-50%,-50%)",
                   textAlign: "center",
-                  color: "white",
-                  background: "rgba(0,0,0,0.55)",
-                  padding: "1rem 1.5rem",
-                  borderRadius: 14,
-                  border: "1px dashed rgba(201,168,76,0.7)",
+                  width: "80%",
+                  maxWidth: 320,
                 }}
               >
-                <div style={{ fontSize: "2rem", marginBottom: "0.4rem" }}>
+                <div style={{ fontSize: "2rem", marginBottom: "0.6rem" }}>
                   🎯
                 </div>
-                <p style={{ margin: 0 }}>{hint}</p>
                 <p
+                  ref={scanRef}
                   style={{
-                    fontSize: "0.78rem",
-                    opacity: 0.65,
-                    marginTop: "0.3rem",
+                    margin: 0,
+                    color: "white",
+                    fontSize: "1rem",
+                    lineHeight: 1.6,
+                    background: "rgba(0,0,0,0.6)",
+                    padding: "0.7rem 1rem",
+                    borderRadius: 14,
+                    border: "1px dashed rgba(201,168,76,0.7)",
+                    textShadow: "0 1px 4px rgba(0,0,0,0.9)",
                   }}
                 >
-                  عندما تظهر الحلقة على الجدار، انقر لوضع اللوحة
+                  🔍 وجّه الكاميرا نحو الأرضية وحرّكها ببطء لمسح الغرفة
                 </p>
               </div>
             )}
