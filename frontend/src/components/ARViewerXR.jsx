@@ -13,7 +13,7 @@ import ARViewer from "./ARViewer"; // النسخة القديمة (Canvas) — �
 
 const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
 const ACCENT = 0xc9a84c; // نفس لون الإطار الذهبي في مشروعك
-const VERSION = "AR v6"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
+const VERSION = "AR v7"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
 
 export default function ARViewerXR({ painting, onClose }) {
   const overlayRef = useRef(null);
@@ -98,8 +98,12 @@ export default function ARViewerXR({ painting, onClose }) {
 
       // ── المؤشر (حلقة) التي تتبع السطح المكتشف ──
       const reticle = new THREE.Mesh(
-        new THREE.RingGeometry(0.06, 0.075, 32).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color: ACCENT }),
+        new THREE.RingGeometry(0.08, 0.1, 32).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({
+          color: ACCENT,
+          transparent: true,
+          opacity: 0.9,
+        }),
       );
       reticle.matrixAutoUpdate = false;
       reticle.visible = false;
@@ -143,6 +147,7 @@ export default function ARViewerXR({ painting, onClose }) {
       );
       canvasMesh.position.z = 0.0165; // أمام وجه الإطار مباشرة
       group.add(frameMesh, canvasMesh);
+      group.userData.halfH = (H + 0.06) / 2; // نصف الارتفاع — لرفعها فوق السطح الأفقي
       group.visible = false;
       scene.add(group);
 
@@ -198,22 +203,71 @@ export default function ARViewerXR({ painting, onClose }) {
 
       let currentHit = null;
       let anchor = null;
+      let lastReticlePos = new THREE.Vector3();
+      let lastIsWall = false;
 
-      // ── دالة وضع موحّدة: تضع اللوحة عند نقطة محدّدة، عمودية وتواجه المستخدم ──
-      const placeAt = async (pos, hit) => {
+      // أدوات حساب يعاد استخدامها (أداء أفضل)
+      const _m = new THREE.Matrix4();
+      const _pos = new THREE.Vector3();
+      const _quat = new THREE.Quaternion();
+      const _scl = new THREE.Vector3();
+      const _normal = new THREE.Vector3();
+      const _up = new THREE.Vector3(0, 1, 0);
+
+      // يحلّل pose السطح: يستخرج الموضع، ويحسب متجه السطح (normal)،
+      // ويقرّر هل هو جدار (عمودي) أم سطح أفقي.
+      const analyzeSurface = (matrixArray) => {
+        _m.fromArray(matrixArray);
+        _m.decompose(_pos, _quat, _scl);
+        // في نتيجة hit-test: محور Y المحلي = اتجاه سطح التقاطع (normal)
+        _normal.set(0, 1, 0).applyQuaternion(_quat).normalize();
+        // لو الـ normal أفقي تقريباً (مكوّن Y صغير) فالسطح عمودي = جدار
+        const isWall = Math.abs(_normal.y) < 0.5;
+        return {
+          pos: _pos.clone(),
+          normal: _normal.clone(),
+          isWall,
+          quat: _quat.clone(),
+        };
+      };
+
+      // يوجّه اللوحة لتلتصق بالسطح:
+      // - على جدار: ظهر اللوحة ملاصق للجدار، ووجهها للخارج (عكس الـ normal)
+      // - على سطح أفقي: تقف عمودية وتواجه المستخدم (كأنها على حامل)
+      const orientArtwork = (info, camPos) => {
+        if (info.isWall) {
+          // اللوحة تواجه الخارج باتجاه الـ normal. محتوى اللوحة على +Z،
+          // لذا نجعل +Z المحلي يحاذي الـ normal.
+          const target = info.pos.clone().add(info.normal);
+          group.position.copy(info.pos);
+          group.up.copy(_up);
+          group.lookAt(target);
+          // ندفع اللوحة قليلاً للأمام عن الجدار حتى لا تتداخل معه
+          group.position.add(info.normal.clone().multiplyScalar(0.02));
+        } else {
+          // سطح أفقي: اللوحة عمودية تواجه المستخدم
+          const yaw = Math.atan2(camPos.x - info.pos.x, camPos.z - info.pos.z);
+          group.position.copy(info.pos);
+          group.position.y += group.userData.halfH || 0; // ترفعها لتقف على السطح
+          group.rotation.set(0, yaw, 0);
+        }
+        group.visible = true;
+      };
+
+      // ── دالة وضع موحّدة ──
+      const placeAt = async (info, hit) => {
         const xrCam = renderer.xr.getCamera();
         const camPos = new THREE.Vector3().setFromMatrixPosition(
           xrCam.matrixWorld,
         );
-        const yaw = Math.atan2(camPos.x - pos.x, camPos.z - pos.z);
-        group.position.copy(pos);
-        group.rotation.set(0, yaw, 0);
-        group.visible = true;
+        orientArtwork(info, camPos);
         reticle.visible = false;
         placedRef.current = true;
         setPlaced(true);
         setHint(
-          'تحرّك حول اللوحة — تبقى ثابتة. اضغط "إعادة وضع" لتغيير المكان',
+          info.isWall
+            ? 'اللوحة مثبّتة على الجدار. اضغط "إعادة وضع" للتغيير'
+            : "اللوحة موضوعة. للحصول على نتيجة أفضل ثبّتها على جدار",
         );
         anchor = null;
         if (hit && hit.createAnchor) {
@@ -227,38 +281,40 @@ export default function ARViewerXR({ painting, onClose }) {
 
       // ── النقر على الشاشة: ضع عند الحلقة (إن ظهرت) ──
       const onSelect = async () => {
-        if (placedRef.current || !reticle.visible) return;
-        const pos = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
-        await placeAt(pos, currentHit);
+        if (placedRef.current || !reticle.visible || !currentHit) return;
+        const pose = currentHit.getPose(localSpace);
+        if (!pose) return;
+        const info = analyzeSurface(pose.transform.matrix);
+        await placeAt(info, currentHit);
       };
       session.addEventListener("select", onSelect);
 
-      // ── وضع يدوي: ضع اللوحة أمام المستخدم مباشرة (حين يتعذّر اكتشاف الجدار) ──
+      // ── وضع يدوي: ضع اللوحة على جدار افتراضي أمام المستخدم مباشرة ──
       E.placeManual = async () => {
         if (placedRef.current) return;
         const xrCam = renderer.xr.getCamera();
         const camPos = new THREE.Vector3().setFromMatrixPosition(
           xrCam.matrixWorld,
         );
-        // اتجاه نظر الكاميرا أفقياً (نلغي الميل لأعلى/أسفل لتبقى اللوحة على الحائط)
         const dir = new THREE.Vector3();
         xrCam.getWorldDirection(dir);
         dir.y = 0;
-        dir.normalize();
-        // ضعها على بُعد 1.5 متر أمام المستخدم، بارتفاع النظر تقريباً
-        const pos = camPos.clone().add(dir.multiplyScalar(1.5));
-        pos.y = camPos.y; // بارتفاع العين
-        await placeAt(pos, null);
+        dir.normalize(); // أفقي تماماً → جدار وهمي عمودي أمامك
+        const pos = camPos.clone().add(dir.clone().multiplyScalar(1.4));
+        pos.y = camPos.y; // بارتفاع النظر
+        // نبني "info" يدوياً يحاكي جداراً: الـ normal يشير نحو المستخدم
+        const info = { pos, normal: dir.clone().negate(), isWall: true };
+        await placeAt(info, null);
       };
 
-      // ── إعادة الوضع: ارفع اللوحة وأعد تفعيل الاكتشاف ──
+      // ── إعادة الوضع ──
       E.resetPlace = () => {
         placedRef.current = false;
         setPlaced(false);
         group.visible = false;
         anchor = null;
         setHint(
-          'وجّه الكاميرا نحو الجدار، وعند ظهور الحلقة انقر — أو استخدم "ضع يدوياً"',
+          'وجّه الكاميرا نحو الجدار، وعند ظهور الحلقة الخضراء انقر — أو استخدم "ضع يدوياً"',
         );
       };
 
@@ -268,28 +324,36 @@ export default function ARViewerXR({ painting, onClose }) {
           if (!placedRef.current) {
             const hits = xrFrame.getHitTestResults(hitSource);
             let poseOk = false;
+            let isWall = false;
             if (hits.length) {
               currentHit = hits[0];
               const pose = currentHit.getPose(localSpace);
               if (pose) {
                 poseOk = true;
+                const info = analyzeSurface(pose.transform.matrix);
+                isWall = info.isWall;
+                lastReticlePos.copy(info.pos);
+                lastIsWall = isWall;
                 reticle.visible = true;
                 reticle.matrix.fromArray(pose.transform.matrix);
+                // لون الحلقة: أخضر للجدار، أصفر للسطح الأفقي
+                reticle.material.color.setHex(isWall ? 0x4ade80 : ACCENT);
               }
             } else {
               reticle.visible = false;
               currentHit = null;
             }
-            // تشخيص حيّ على الشاشة
             if (debugRef.current) {
-              debugRef.current.textContent = `نتائج: ${hits.length} | pose: ${poseOk ? "✓" : "✗"} | حلقة: ${reticle.visible ? "ظاهرة" : "مخفية"}`;
+              debugRef.current.textContent = `نتائج: ${hits.length} | ${poseOk ? (isWall ? "جدار ✓" : "أفقي") : "—"} | حلقة: ${reticle.visible ? "ظاهرة" : "مخفية"}`;
             }
           } else if (anchor && anchor.anchorSpace) {
+            // تتبّع الـ anchor: نحدّث الموضع والاتجاه معاً ليبقى التثبيت دقيقاً
             const ap = xrFrame.getPose(anchor.anchorSpace, localSpace);
-            if (ap)
-              group.position.setFromMatrixPosition(
-                new THREE.Matrix4().fromArray(ap.transform.matrix),
-              );
+            if (ap) {
+              _m.fromArray(ap.transform.matrix);
+              _m.decompose(_pos, _quat, _scl);
+              group.position.copy(_pos);
+            }
           }
         }
         frameMesh.visible = showFrameRef.current;
