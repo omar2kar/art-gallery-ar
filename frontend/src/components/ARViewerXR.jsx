@@ -13,7 +13,7 @@ import ARViewer from "./ARViewer"; // النسخة القديمة (Canvas) — �
 
 const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
 const ACCENT = 0xc9a84c; // نفس لون الإطار الذهبي في مشروعك
-const VERSION = "AR v5"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
+const VERSION = "AR v6"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
 
 export default function ARViewerXR({ painting, onClose }) {
   const overlayRef = useRef(null);
@@ -190,6 +190,8 @@ export default function ARViewerXR({ painting, onClose }) {
         viewerSpace = localSpace;
       }
 
+      // hit-test: نطلب نتائج من أي سطح (أفقي أو عمودي). الأسطح العمودية (الجدران)
+      // أصعب اكتشافاً، لذا نوفّر أيضاً وضعاً يدوياً احتياطياً عبر زر.
       const hitSource = await session.requestHitTestSource({
         space: viewerSpace,
       });
@@ -197,36 +199,68 @@ export default function ARViewerXR({ painting, onClose }) {
       let currentHit = null;
       let anchor = null;
 
-      // ── عند النقر على الشاشة: ضع اللوحة ──
-      const onSelect = async () => {
-        if (placedRef.current || !reticle.visible) return;
-        placedRef.current = true;
-        setPlaced(true);
-
-        const pos = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
+      // ── دالة وضع موحّدة: تضع اللوحة عند نقطة محدّدة، عمودية وتواجه المستخدم ──
+      const placeAt = async (pos, hit) => {
         const xrCam = renderer.xr.getCamera();
         const camPos = new THREE.Vector3().setFromMatrixPosition(
           xrCam.matrixWorld,
         );
-
-        // اجعل اللوحة قائمة (عمودية) وتواجه المستخدم — دوران حول المحور Y فقط
         const yaw = Math.atan2(camPos.x - pos.x, camPos.z - pos.z);
         group.position.copy(pos);
         group.rotation.set(0, yaw, 0);
         group.visible = true;
         reticle.visible = false;
-        setHint("تحرّك حول اللوحة — تبقى ثابتة على مكانها");
-
-        // ثبّتها بنقطة حقيقية (anchor) لتقليل الاهتزاز، لو مدعوم
-        if (currentHit && currentHit.createAnchor) {
+        placedRef.current = true;
+        setPlaced(true);
+        setHint(
+          'تحرّك حول اللوحة — تبقى ثابتة. اضغط "إعادة وضع" لتغيير المكان',
+        );
+        anchor = null;
+        if (hit && hit.createAnchor) {
           try {
-            anchor = await currentHit.createAnchor();
+            anchor = await hit.createAnchor();
           } catch {
             anchor = null;
           }
         }
       };
+
+      // ── النقر على الشاشة: ضع عند الحلقة (إن ظهرت) ──
+      const onSelect = async () => {
+        if (placedRef.current || !reticle.visible) return;
+        const pos = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
+        await placeAt(pos, currentHit);
+      };
       session.addEventListener("select", onSelect);
+
+      // ── وضع يدوي: ضع اللوحة أمام المستخدم مباشرة (حين يتعذّر اكتشاف الجدار) ──
+      E.placeManual = async () => {
+        if (placedRef.current) return;
+        const xrCam = renderer.xr.getCamera();
+        const camPos = new THREE.Vector3().setFromMatrixPosition(
+          xrCam.matrixWorld,
+        );
+        // اتجاه نظر الكاميرا أفقياً (نلغي الميل لأعلى/أسفل لتبقى اللوحة على الحائط)
+        const dir = new THREE.Vector3();
+        xrCam.getWorldDirection(dir);
+        dir.y = 0;
+        dir.normalize();
+        // ضعها على بُعد 1.5 متر أمام المستخدم، بارتفاع النظر تقريباً
+        const pos = camPos.clone().add(dir.multiplyScalar(1.5));
+        pos.y = camPos.y; // بارتفاع العين
+        await placeAt(pos, null);
+      };
+
+      // ── إعادة الوضع: ارفع اللوحة وأعد تفعيل الاكتشاف ──
+      E.resetPlace = () => {
+        placedRef.current = false;
+        setPlaced(false);
+        group.visible = false;
+        anchor = null;
+        setHint(
+          'وجّه الكاميرا نحو الجدار، وعند ظهور الحلقة انقر — أو استخدم "ضع يدوياً"',
+        );
+      };
 
       // ── حلقة الرسم ──
       renderer.setAnimationLoop((t, xrFrame) => {
@@ -271,6 +305,8 @@ export default function ARViewerXR({ painting, onClose }) {
         placedRef.current = false;
         setRunning(false);
         setPlaced(false);
+        E.placeManual = null;
+        E.resetPlace = null;
         onClose && onClose();
       });
 
@@ -587,21 +623,71 @@ export default function ARViewerXR({ painting, onClose }) {
                   {hint}
                 </p>
               )}
-              <button
-                onClick={toggleFrame}
+
+              <div
                 style={{
-                  pointerEvents: "auto",
-                  background: "rgba(255,255,255,0.12)",
-                  border: `1px solid ${showFrame ? "rgba(201,168,76,0.8)" : "rgba(255,255,255,0.25)"}`,
-                  color: "white",
-                  padding: "0.5rem 1rem",
-                  borderRadius: 10,
-                  fontSize: "0.8rem",
-                  cursor: "pointer",
+                  display: "flex",
+                  gap: "0.6rem",
+                  flexWrap: "wrap",
+                  justifyContent: "center",
                 }}
               >
-                🖼️ {showFrame ? "إخفاء الإطار" : "إظهار الإطار"}
-              </button>
+                {/* قبل الوضع: زر الوضع اليدوي الاحتياطي */}
+                {!placed && (
+                  <button
+                    onClick={() => E.placeManual && E.placeManual()}
+                    style={{
+                      pointerEvents: "auto",
+                      background:
+                        "linear-gradient(135deg,var(--accent),var(--accent2))",
+                      border: "none",
+                      color: "#0a0a0f",
+                      fontWeight: 700,
+                      padding: "0.55rem 1.1rem",
+                      borderRadius: 10,
+                      fontSize: "0.82rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    📌 ضع على الجدار يدوياً
+                  </button>
+                )}
+
+                {/* بعد الوضع: زر إعادة الوضع */}
+                {placed && (
+                  <button
+                    onClick={() => E.resetPlace && E.resetPlace()}
+                    style={{
+                      pointerEvents: "auto",
+                      background: "rgba(255,255,255,0.12)",
+                      border: "1px solid rgba(201,168,76,0.8)",
+                      color: "white",
+                      padding: "0.55rem 1.1rem",
+                      borderRadius: 10,
+                      fontSize: "0.82rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    🔄 إعادة وضع
+                  </button>
+                )}
+
+                <button
+                  onClick={toggleFrame}
+                  style={{
+                    pointerEvents: "auto",
+                    background: "rgba(255,255,255,0.12)",
+                    border: `1px solid ${showFrame ? "rgba(201,168,76,0.8)" : "rgba(255,255,255,0.25)"}`,
+                    color: "white",
+                    padding: "0.55rem 1.1rem",
+                    borderRadius: 10,
+                    fontSize: "0.82rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  🖼️ {showFrame ? "إخفاء الإطار" : "إظهار الإطار"}
+                </button>
+              </div>
             </div>
           </>
         )}
