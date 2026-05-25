@@ -1,0 +1,108 @@
+/* ============================================
+   enhancements.css — تحسينات جمالية إضافية
+   استورده مرة واحدة في main.jsx أو App.jsx:
+   import "./enhancements.css";
+   ============================================ */
+
+/* ---- حركة دخول الـ Hero ---- */
+@keyframes heroIn {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.hero-in {
+    animation: heroIn 0.7s ease both;
+}
+
+/* ---- ظهور متدرّج للبطاقات ---- */
+@keyframes fadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(24px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-up {
+    animation: fadeUp 0.55s ease both;
+}
+
+/* احترام تفضيل تقليل الحركة */
+@media (prefers-reduced-motion: reduce) {
+
+    .hero-in,
+    .fade-up {
+        animation: none;
+    }
+}
+
+/* ---- هيكل عظمي (skeleton) أثناء التحميل ---- */
+.sk-card {
+    pointer-events: none;
+}
+
+.sk {
+    background: linear-gradient(100deg,
+            var(--surface2) 30%,
+            rgba(201, 168, 76, 0.08) 50%,
+            var(--surface2) 70%);
+    background-size: 200% 100%;
+    animation: shimmer 1.3s infinite;
+    border-radius: 6px;
+}
+
+@keyframes shimmer {
+    from {
+        background-position: 200% 0;
+    }
+
+    to {
+        background-position: -200% 0;
+    }
+}
+
+.sk-img {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    border-radius: 0;
+}
+
+.sk-line {
+    height: 13px;
+    margin-bottom: 0.5rem;
+}
+
+/* ---- أزرار الفلترة (chips) ---- */
+.chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.4rem 1rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.25s;
+}
+
+.chip:hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+
+.chip-active {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #0a0a0f;
+    border-color: transparent;
+    font-weight: 700;
+}

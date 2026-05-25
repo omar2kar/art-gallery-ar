@@ -1,13 +1,18 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import useFavorites from "../hooks/useFavorites";
 
-// إصلاح مهم: استخدام متغيّر البيئة بدل IP ثابت — وإلا تُحجب الصور على Vercel (Mixed Content)
+// إصلاح مهم: متغيّر بيئة بدل IP ثابت — وإلا تُحجب الصور على Vercel (Mixed Content)
 const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
 
 export default function PaintingCard({ painting, onARClick }) {
   const navigate = useNavigate();
+  const { isFav, toggle } = useFavorites();
   const [hover, setHover] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [shared, setShared] = useState(false);
+
+  const fav = isFav(painting.id);
 
   const imgSrc =
     painting.image && !imgError
@@ -15,6 +20,28 @@ export default function PaintingCard({ painting, onARClick }) {
       : `https://picsum.photos/seed/${painting.id}/400/300`;
 
   const goDetail = () => navigate(`/painting/${painting.id}`);
+
+  // مشاركة: نستخدم Web Share API على الجوال، أو نسخ الرابط على غيره
+  const share = async (e) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/painting/${painting.id}`;
+    const data = {
+      title: painting.title,
+      text: `${painting.title} — ${painting.artist_name}`,
+      url,
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(data);
+      } else {
+        await navigator.clipboard.writeText(url);
+        setShared(true);
+        setTimeout(() => setShared(false), 1800);
+      }
+    } catch {
+      /* أُلغيت المشاركة */
+    }
+  };
 
   return (
     <div
@@ -38,7 +65,36 @@ export default function PaintingCard({ painting, onARClick }) {
           }}
           onClick={goDetail}
         />
-        {/* Hover overlay — يُتحكَّم به من حالة البطاقة ليعمل على اللمس أيضاً */}
+
+        {/* زر المفضّلة (قلب) أعلى اليمين */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            toggle(painting.id);
+          }}
+          aria-label="favorite"
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            width: 38,
+            height: 38,
+            borderRadius: "50%",
+            border: "none",
+            background: "rgba(10,10,15,0.55)",
+            backdropFilter: "blur(4px)",
+            fontSize: "1.1rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "transform 0.2s",
+            transform: fav ? "scale(1.15)" : "scale(1)",
+          }}
+        >
+          {fav ? "❤️" : "🤍"}
+        </button>
+
+        {/* Hover overlay — يعمل باللمس أيضاً */}
         <div
           style={{
             position: "absolute",
@@ -110,6 +166,7 @@ export default function PaintingCard({ painting, onARClick }) {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          gap: "0.5rem",
         }}
       >
         <button
@@ -125,9 +182,23 @@ export default function PaintingCard({ painting, onARClick }) {
         >
           📷 Duvarda Görüntüle
         </button>
-        <span style={{ color: "var(--muted)", fontSize: "0.8rem" }}>
-          {painting.year}
-        </span>
+
+        <button
+          onClick={share}
+          aria-label="share"
+          title="Paylaş"
+          style={{
+            background: "none",
+            border: "1px solid var(--border)",
+            color: shared ? "var(--accent)" : "var(--muted)",
+            borderRadius: 6,
+            padding: "0.35rem 0.6rem",
+            fontSize: "0.8rem",
+            transition: "all 0.2s",
+          }}
+        >
+          {shared ? "✓ Kopyalandı" : "🔗"}
+        </button>
       </div>
     </div>
   );

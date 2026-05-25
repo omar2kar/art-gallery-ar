@@ -1,21 +1,32 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../api/axios";
 import PaintingCard from "../components/PaintingCard";
 import ARViewer from "../components/ARViewerXR";
+
+// خيارات الترتيب
+const SORTS = {
+  newest: { label: "En Yeni", fn: (a, b) => b.id - a.id },
+  cheap: { label: "Fiyat ↑", fn: (a, b) => Number(a.price) - Number(b.price) },
+  expensive: {
+    label: "Fiyat ↓",
+    fn: (a, b) => Number(b.price) - Number(a.price),
+  },
+};
 
 export default function Home() {
   const [paintings, setPaintings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [slow, setSlow] = useState(false); // الخادم بطيء (نوم Render)
+  const [slow, setSlow] = useState(false);
   const [arPainting, setArPainting] = useState(null);
   const [search, setSearch] = useState("");
+  const [style, setStyle] = useState("all"); // فلتر النمط
+  const [sort, setSort] = useState("newest"); // الترتيب
 
   const load = useCallback(() => {
     setLoading(true);
     setError(false);
     setSlow(false);
-    // لو تأخّر الرد (Render نائم) نُظهر رسالة طمأنة بعد 4 ثوانٍ
     const slowTimer = setTimeout(() => setSlow(true), 4000);
     api
       .get("/paintings")
@@ -31,21 +42,58 @@ export default function Home() {
     load();
   }, [load]);
 
-  // بحث غير حسّاس لحالة الأحرف ويتجاهل المسافات الزائدة
-  const q = search.trim().toLocaleLowerCase("tr-TR");
-  const filtered = paintings.filter((p) => {
-    if (!q) return true;
-    const hay = [p.title, p.artist_name, p.style]
-      .filter(Boolean)
-      .join(" ")
-      .toLocaleLowerCase("tr-TR");
-    return hay.includes(q);
-  });
+  // أنماط فريدة للفلترة (من البيانات نفسها)
+  const styles = useMemo(() => {
+    const set = new Set(paintings.map((p) => p.style).filter(Boolean));
+    return ["all", ...set];
+  }, [paintings]);
+
+  // بحث + فلتر + ترتيب
+  const visible = useMemo(() => {
+    const q = search.trim().toLocaleLowerCase("tr-TR");
+    let list = paintings.filter((p) => {
+      const okStyle = style === "all" || p.style === style;
+      if (!okStyle) return false;
+      if (!q) return true;
+      const hay = [p.title, p.artist_name, p.style]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase("tr-TR");
+      return hay.includes(q);
+    });
+    return list.sort(SORTS[sort].fn);
+  }, [paintings, search, style, sort]);
 
   return (
     <div className="page-wrapper">
+      {/* خلفية متوهّجة ناعمة خلف الـ Hero */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: 0,
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: "min(900px, 90vw)",
+          height: 420,
+          background:
+            "radial-gradient(ellipse at center, rgba(201,168,76,0.18), transparent 70%)",
+          filter: "blur(40px)",
+          pointerEvents: "none",
+          zIndex: 0,
+        }}
+      />
+
       {/* Hero */}
-      <div style={{ textAlign: "center", padding: "2rem 0 3rem" }}>
+      <div
+        style={{
+          textAlign: "center",
+          padding: "2rem 0 3rem",
+          position: "relative",
+          zIndex: 1,
+        }}
+        className="hero-in"
+      >
         <div
           style={{
             fontSize: "0.8rem",
@@ -76,8 +124,15 @@ export default function Home() {
         </p>
       </div>
 
-      {/* Search */}
-      <div style={{ maxWidth: 500, margin: "0 auto 2rem" }}>
+      {/* البحث */}
+      <div
+        style={{
+          maxWidth: 500,
+          margin: "0 auto 1.2rem",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
         <input
           placeholder="🔍  Tablo veya sanatçı ara..."
           value={search}
@@ -85,28 +140,92 @@ export default function Home() {
         />
       </div>
 
-      {/* تحميل */}
-      {loading && (
-        <div className="loading">
-          ⏳ Tablolar yükleniyor...
-          {slow && (
-            <div
-              style={{
-                fontSize: "0.85rem",
-                marginTop: "0.8rem",
-                color: "var(--muted)",
-                lineHeight: 1.6,
-              }}
+      {/* شريط الفلترة + الترتيب */}
+      {!loading && !error && paintings.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.5rem",
+            justifyContent: "center",
+            alignItems: "center",
+            marginBottom: "2rem",
+            position: "relative",
+            zIndex: 1,
+          }}
+        >
+          {styles.map((s) => (
+            <button
+              key={s}
+              onClick={() => setStyle(s)}
+              className={style === s ? "chip chip-active" : "chip"}
             >
-              Sunucu uyanıyor, bu ilk açılışta biraz sürebilir (~30 sn).
-              <br />
-              Lütfen bekleyin...
-            </div>
-          )}
+              {s === "all" ? "Tümü" : s}
+            </button>
+          ))}
+
+          <span
+            style={{
+              width: 1,
+              height: 22,
+              background: "var(--border)",
+              margin: "0 0.3rem",
+            }}
+          />
+
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            style={{
+              width: "auto",
+              padding: "0.4rem 0.8rem",
+              fontSize: "0.85rem",
+            }}
+          >
+            {Object.entries(SORTS).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v.label}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
-      {/* خطأ اتصال */}
+      {/* تحميل — هيكل عظمي (skeleton) */}
+      {loading && (
+        <>
+          {slow && (
+            <div className="loading" style={{ paddingBottom: "1rem" }}>
+              <div
+                style={{
+                  fontSize: "0.9rem",
+                  color: "var(--muted)",
+                  lineHeight: 1.6,
+                }}
+              >
+                ⏳ Sunucu uyanıyor, ilk açılış biraz sürebilir (~30 sn)...
+              </div>
+            </div>
+          )}
+          <div className="grid-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="card sk-card">
+                <div className="sk sk-img" />
+                <div style={{ padding: "1rem" }}>
+                  <div className="sk sk-line" style={{ width: "70%" }} />
+                  <div className="sk sk-line" style={{ width: "45%" }} />
+                  <div
+                    className="sk sk-line"
+                    style={{ width: "30%", marginTop: "0.8rem" }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* خطأ */}
       {!loading && error && (
         <div className="loading">
           <div style={{ fontSize: "2.5rem", marginBottom: "0.8rem" }}>⚠️</div>
@@ -120,19 +239,25 @@ export default function Home() {
       )}
 
       {/* لا نتائج */}
-      {!loading && !error && filtered.length === 0 && (
+      {!loading && !error && visible.length === 0 && (
         <div className="loading">
-          {search.trim()
-            ? `"${search}" için sonuç bulunamadı`
+          {search.trim() || style !== "all"
+            ? "Aramanıza uygun sonuç bulunamadı"
             : "Henüz tablo eklenmemiş"}
         </div>
       )}
 
-      {/* الشبكة */}
-      {!loading && !error && filtered.length > 0 && (
+      {/* الشبكة — مع ظهور متدرّج */}
+      {!loading && !error && visible.length > 0 && (
         <div className="grid-3">
-          {filtered.map((p) => (
-            <PaintingCard key={p.id} painting={p} onARClick={setArPainting} />
+          {visible.map((p, i) => (
+            <div
+              key={p.id}
+              className="fade-up"
+              style={{ animationDelay: `${Math.min(i * 60, 600)}ms` }}
+            >
+              <PaintingCard painting={p} onARClick={setArPainting} />
+            </div>
           ))}
         </div>
       )}
