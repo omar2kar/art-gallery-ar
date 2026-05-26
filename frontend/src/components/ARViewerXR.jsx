@@ -13,7 +13,7 @@ import ARViewer from "./ARViewer"; // النسخة القديمة (Canvas) — �
 
 const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
 const ACCENT = 0xc9a84c; // نفس لون الإطار الذهبي في مشروعك
-const VERSION = "AR v8"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
+const VERSION = "AR v10"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
 
 export default function ARViewerXR({ painting, onClose }) {
   const overlayRef = useRef(null);
@@ -22,13 +22,16 @@ export default function ARViewerXR({ painting, onClose }) {
   const [running, setRunning] = useState(false);
   const [placed, setPlaced] = useState(false);
   const [showFrame, setShowFrame] = useState(true);
-  const [hint, setHint] = useState("وجّه الكاميرا نحو الجدار ببطء");
+  const [hint, setHint] = useState("Telefonu yavaşça sağa-sola hareket ettir");
   const [error, setError] = useState("");
   const [diag, setDiag] = useState(""); // رسالة تشخيص تظهر على الشاشة
   const [forceOld, setForceOld] = useState(false); // خطة بديلة يدوية
+  const [brightness, setBrightness] = useState(0.82); // سطوع اللوحة (للواجهة)
 
   // مراجع ثابتة لكائنات three.js (لا تسبب إعادة رسم React)
   const E = useRef({}).current;
+  const heightRef = useRef(1.45); // ارتفاع اللوحة على الجدار (وضع الأرض)
+  const brightnessRef = useRef(0.82); // سطوع اللوحة (يطابق إضاءة الغرفة)
   const placedRef = useRef(false);
   const showFrameRef = useRef(true);
   const debugRef = useRef(null); // عنصر يعرض تشخيص hit-test حيّاً
@@ -49,12 +52,12 @@ export default function ARViewerXR({ painting, onClose }) {
       .then((ok) => {
         if (!alive) return;
         setSupport("ready"); // نعرض زر البدء دائماً طالما xr موجود
-        setDiag(ok ? "" : "⚠ الفحص أرجع false — سنحاول البدء على أي حال");
+        setDiag(ok ? "" : "⚠ Destek kontrolü belirsiz — yine de denenecek");
       })
       .catch((err) => {
         if (!alive) return;
         setSupport("ready");
-        setDiag("⚠ فحص الدعم أعطى خطأ: " + (err?.message || err));
+        setDiag("⚠ Destek kontrolü hatası: " + (err?.message || err));
       });
     return () => {
       alive = false;
@@ -82,8 +85,8 @@ export default function ARViewerXR({ painting, onClose }) {
         30,
       );
 
-      // ── إضاءة الغرفة الحقيقية (تقدير تلقائي) + إضاءة احتياطية ──
-      const ambient = new THREE.AmbientLight(0xffffff, 1.1);
+      // ── إضاءة الغرفة الحقيقية (تقدير تلقائي) + إضاءة احتياطية معتدلة ──
+      const ambient = new THREE.AmbientLight(0xffffff, 0.85);
       scene.add(ambient);
       const xrLight = new XREstimatedLight(renderer);
       xrLight.addEventListener("estimationstart", () => {
@@ -130,6 +133,9 @@ export default function ARViewerXR({ painting, onClose }) {
       const H = W * ratio;
 
       // ── مجموعة اللوحة = إطار ذهبي + قماش ──
+      // القماش يبدأ بسطوع مخفّض (0.82) ليندمج مع إضاءة الغرفة بدل أن يبدو مضيئاً ذاتياً.
+      // المستخدم يضبطه لاحقاً عبر شريط السطوع.
+      const BRIGHT_DEFAULT = 0.82;
       const group = new THREE.Group();
       const frameMesh = new THREE.Mesh(
         new THREE.BoxGeometry(W + 0.06, H + 0.06, 0.03),
@@ -139,18 +145,31 @@ export default function ARViewerXR({ painting, onClose }) {
           roughness: 0.35,
         }),
       );
+      const tint = Math.round(BRIGHT_DEFAULT * 255);
+      const canvasMat = new THREE.MeshBasicMaterial({
+        map: tex || null,
+        color: tex
+          ? new THREE.Color(BRIGHT_DEFAULT, BRIGHT_DEFAULT, BRIGHT_DEFAULT)
+          : new THREE.Color(0x555555),
+        transparent: true,
+        opacity: 1,
+      });
       const canvasMesh = new THREE.Mesh(
         new THREE.PlaneGeometry(W, H),
-        new THREE.MeshBasicMaterial({
-          map: tex || null,
-          color: tex ? 0xffffff : 0x555555,
-        }),
+        canvasMat,
       );
       canvasMesh.position.z = 0.0165; // أمام وجه الإطار مباشرة
       group.add(frameMesh, canvasMesh);
       group.userData.halfH = (H + 0.06) / 2; // نصف الارتفاع — لرفعها فوق السطح الأفقي
       group.visible = false;
       scene.add(group);
+
+      // التحكّم بسطوع اللوحة (يطابقها مع إضاءة الغرفة)
+      E.setBrightness = (val) => {
+        const v = Math.max(0.25, Math.min(1, val));
+        brightnessRef.current = v;
+        if (tex) canvasMat.color.setRGB(v, v, v);
+      };
 
       // ── طلب الجلسة ──
       // مهم: ندرج أنواع الفضاء المرجعي (local-floor...) ضمن optionalFeatures،
@@ -263,19 +282,59 @@ export default function ARViewerXR({ painting, onClose }) {
       };
 
       // ── دالة وضع موحّدة ──
+      // الوضع الذكي (طريقة Artmajeur): عند النقر على الأرض قرب الجدار،
+      // نحسب الجدار القائم عمودياً من تلك النقطة، ونرفع اللوحة لارتفاع مناسب.
+      const WALL_HEIGHT_DEFAULT = 1.45; // ارتفاع مركز اللوحة الافتراضي (متر)
+      let wallBaseY = 0; // ارتفاع الأرض عند نقطة الوضع
+      let wallNormalFlat = null; // اتجاه الجدار الأفقي
+      let wallGroundPos = null; // نقطة الأرض المختارة
+
+      const applyWallPlacement = (heightAboveFloor) => {
+        if (!wallNormalFlat || !wallGroundPos) return;
+        group.position.set(
+          wallGroundPos.x,
+          wallBaseY + heightAboveFloor,
+          wallGroundPos.z,
+        );
+        const yaw = Math.atan2(wallNormalFlat.x, wallNormalFlat.z);
+        group.rotation.set(0, yaw, 0);
+        group.position.add(wallNormalFlat.clone().multiplyScalar(0.02));
+        group.visible = true;
+      };
+
       const placeAt = async (info, hit) => {
         const xrCam = renderer.xr.getCamera();
         const camPos = new THREE.Vector3().setFromMatrixPosition(
           xrCam.matrixWorld,
         );
-        orientArtwork(info, camPos);
+
+        if (info.isWall) {
+          // اكتشاف جدار مباشر: نستخدمه كما هو
+          orientArtwork(info, camPos);
+          wallGroundPos = null; // ليس وضع أرض
+        } else {
+          // === طريقة Artmajeur: النقر على الأرض → نبني الجدار منها ===
+          // نقطة الأرض المختارة
+          wallGroundPos = info.pos.clone();
+          wallBaseY = info.pos.y;
+          // اتجاه الجدار = الاتجاه الأفقي من الكاميرا نحو نقطة الأرض
+          const flat = new THREE.Vector3().subVectors(info.pos, camPos);
+          flat.y = 0;
+          if (flat.lengthSq() < 1e-6) flat.set(0, 0, -1);
+          flat.normalize();
+          // اللوحة تواجه المستخدم: الـ normal عكس اتجاه النظر
+          wallNormalFlat = flat.clone().negate();
+          heightRef.current = WALL_HEIGHT_DEFAULT;
+          applyWallPlacement(heightRef.current);
+        }
+
         reticle.visible = false;
         placedRef.current = true;
         setPlaced(true);
         setHint(
-          info.isWall
-            ? 'اللوحة مثبّتة على الجدار. اضغط "إعادة وضع" للتغيير'
-            : "اللوحة موضوعة. للحصول على نتيجة أفضل ثبّتها على جدار",
+          wallGroundPos
+            ? "Tablo duvarda. Yüksekliği ↑↓ ile ayarla"
+            : 'Tablo duvara sabitlendi. Değiştirmek için "Yeniden Yerleştir"',
         );
         anchor = null;
         if (hit && hit.createAnchor) {
@@ -285,6 +344,16 @@ export default function ARViewerXR({ painting, onClose }) {
             anchor = null;
           }
         }
+      };
+
+      // رفع/خفض اللوحة على الجدار (لوضع الأرض)
+      E.adjustHeight = (delta) => {
+        if (!wallGroundPos) return;
+        heightRef.current = Math.max(
+          0.3,
+          Math.min(2.4, heightRef.current + delta),
+        );
+        applyWallPlacement(heightRef.current);
       };
 
       // ── النقر على الشاشة: ضع عند الحلقة (إن ظهرت) ──
@@ -322,7 +391,7 @@ export default function ARViewerXR({ painting, onClose }) {
         group.visible = false;
         anchor = null;
         setHint(
-          'وجّه الكاميرا نحو الجدار، وعند ظهور الحلقة الخضراء انقر — أو استخدم "ضع يدوياً"',
+          'Yeşil halka göründüğünde dokun — veya "Manuel Yerleştir" kullan',
         );
       };
 
@@ -355,27 +424,28 @@ export default function ARViewerXR({ painting, onClose }) {
               currentHit = null;
             }
 
-            // رسالة إرشاد المسح: توجّه المستخدم للطريقة الأنجح (أرضية ← ثم جدار)
+            // رسالة إرشاد: طريقة Artmajeur — اكتشف الأرض ثم انقر عند التقائها بالجدار
             if (scanRef.current) {
               let msg;
               if (isWall && reticle.visible) {
-                msg = "✅ جدار جاهز — انقر لوضع اللوحة";
+                msg = "✅ Duvar algılandı — tabloyu sabitlemek için dokun";
                 scanRef.current.style.color = "#4ade80";
               } else if (reticle.visible) {
-                msg = "👇 سطح مكتشف — ارفع الكاميرا تدريجياً نحو الجدار";
-                scanRef.current.style.color = "#e8c45a";
+                msg = "👇 Daireyi zemin-duvar köşesine getir ve dokun";
+                scanRef.current.style.color = "#4ade80";
               } else if (floorSeenCount > 0) {
-                msg = "🔍 حرّك الهاتف ببطء نحو الجدار";
+                msg = "🔍 Telefonu yavaşça sağa-sola hareket ettir…";
                 scanRef.current.style.color = "#ffffff";
               } else {
-                msg = "🔍 وجّه الكاميرا نحو الأرضية وحرّكها ببطء لمسح الغرفة";
+                msg =
+                  "🔍 Kamerayı zemine tut, telefonu yavaşça sağa-sola oynat";
                 scanRef.current.style.color = "#ffffff";
               }
               scanRef.current.textContent = msg;
             }
 
             if (debugRef.current) {
-              debugRef.current.textContent = `نتائج: ${hits.length} | ${poseOk ? (isWall ? "جدار ✓" : "أفقي") : "—"} | جدران:${wallSeenCount}`;
+              debugRef.current.textContent = `${hits.length} yüzey | ${poseOk ? (isWall ? "duvar ✓" : "zemin") : "—"}`;
             }
           } else if (anchor && anchor.anchorSpace) {
             const ap = xrFrame.getPose(anchor.anchorSpace, localSpace);
@@ -401,12 +471,14 @@ export default function ARViewerXR({ painting, onClose }) {
         setPlaced(false);
         E.placeManual = null;
         E.resetPlace = null;
+        E.adjustHeight = null;
+        E.setBrightness = null;
         onClose && onClose();
       });
 
       E.session = session;
     } catch (err) {
-      setError("تعذّر بدء الكاميرا: " + (err?.message || err));
+      setError("Kamera başlatılamadı: " + (err?.message || err));
       setRunning(false);
     }
   }, [painting, onClose]);
@@ -455,7 +527,9 @@ export default function ARViewerXR({ painting, onClose }) {
     <div style={dark}>
       {/* فحص الدعم */}
       {support === "checking" && (
-        <p style={{ color: "rgba(255,255,255,0.6)" }}>جارٍ فحص دعم الكاميرا…</p>
+        <p style={{ color: "rgba(255,255,255,0.6)" }}>
+          Kamera desteği kontrol ediliyor…
+        </p>
       )}
 
       {/* شاشة البدء */}
@@ -501,7 +575,7 @@ export default function ARViewerXR({ painting, onClose }) {
               marginBottom: "1.8rem",
             }}
           >
-            جرّب اللوحة على جدارك بالكاميرا الحية
+            Tabloyu canlı kamerayla duvarında dene
           </p>
 
           {error && (
@@ -552,7 +626,7 @@ export default function ARViewerXR({ painting, onClose }) {
               boxShadow: "0 8px 30px rgba(201,168,76,0.35)",
             }}
           >
-            <span>📷</span> ابدأ تجربة الواقع المعزز
+            <span>📷</span> Artırılmış Gerçekliği Başlat
           </button>
 
           <button
@@ -569,7 +643,7 @@ export default function ARViewerXR({ painting, onClose }) {
               marginBottom: "0.9rem",
             }}
           >
-            🖼️ استخدم النسخة العادية (رفع صورة)
+            🖼️ Normal sürümü kullan (fotoğraf yükle)
           </button>
 
           <button
@@ -582,7 +656,7 @@ export default function ARViewerXR({ painting, onClose }) {
               fontSize: "0.9rem",
             }}
           >
-            ✕ إغلاق
+            ✕ Kapat
           </button>
 
           <p
@@ -689,7 +763,7 @@ export default function ARViewerXR({ painting, onClose }) {
                     textShadow: "0 1px 4px rgba(0,0,0,0.9)",
                   }}
                 >
-                  🔍 وجّه الكاميرا نحو الأرضية وحرّكها ببطء لمسح الغرفة
+                  🔍 Kamerayı zemine tut, odayı taramak için yavaşça oynat
                 </p>
               </div>
             )}
@@ -721,6 +795,49 @@ export default function ARViewerXR({ painting, onClose }) {
                 </p>
               )}
 
+              {/* شريط سطوع اللوحة — يطابقها مع إضاءة الغرفة */}
+              {placed && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.6rem",
+                    background: "rgba(0,0,0,0.5)",
+                    padding: "0.4rem 0.9rem",
+                    borderRadius: 20,
+                    pointerEvents: "auto",
+                  }}
+                >
+                  <span style={{ fontSize: "0.9rem" }}>🔆</span>
+                  <input
+                    type="range"
+                    min="25"
+                    max="100"
+                    value={Math.round(brightness * 100)}
+                    onChange={(e) => {
+                      const v = Number(e.target.value) / 100;
+                      setBrightness(v);
+                      E.setBrightness && E.setBrightness(v);
+                    }}
+                    style={{
+                      width: 130,
+                      accentColor: "#c9a84c",
+                      cursor: "pointer",
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "rgba(255,255,255,0.7)",
+                      minWidth: 32,
+                      textAlign: "center",
+                    }}
+                  >
+                    {Math.round(brightness * 100)}%
+                  </span>
+                </div>
+              )}
+
               <div
                 style={{
                   display: "flex",
@@ -746,8 +863,44 @@ export default function ARViewerXR({ painting, onClose }) {
                       cursor: "pointer",
                     }}
                   >
-                    📌 ضع على الجدار يدوياً
+                    📌 Duvara Manuel Yerleştir
                   </button>
+                )}
+
+                {/* بعد الوضع: أزرار ضبط الارتفاع */}
+                {placed && (
+                  <>
+                    <button
+                      onClick={() => E.adjustHeight && E.adjustHeight(0.1)}
+                      style={{
+                        pointerEvents: "auto",
+                        background: "rgba(255,255,255,0.12)",
+                        border: "1px solid rgba(255,255,255,0.25)",
+                        color: "white",
+                        padding: "0.55rem 0.9rem",
+                        borderRadius: 10,
+                        fontSize: "1rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      ⬆️
+                    </button>
+                    <button
+                      onClick={() => E.adjustHeight && E.adjustHeight(-0.1)}
+                      style={{
+                        pointerEvents: "auto",
+                        background: "rgba(255,255,255,0.12)",
+                        border: "1px solid rgba(255,255,255,0.25)",
+                        color: "white",
+                        padding: "0.55rem 0.9rem",
+                        borderRadius: 10,
+                        fontSize: "1rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      ⬇️
+                    </button>
+                  </>
                 )}
 
                 {/* بعد الوضع: زر إعادة الوضع */}
@@ -765,7 +918,7 @@ export default function ARViewerXR({ painting, onClose }) {
                       cursor: "pointer",
                     }}
                   >
-                    🔄 إعادة وضع
+                    🔄 Yeniden Yerleştir
                   </button>
                 )}
 
@@ -782,7 +935,7 @@ export default function ARViewerXR({ painting, onClose }) {
                     cursor: "pointer",
                   }}
                 >
-                  🖼️ {showFrame ? "إخفاء الإطار" : "إظهار الإطار"}
+                  🖼️ {showFrame ? "Çerçeveyi Gizle" : "Çerçeveyi Göster"}
                 </button>
               </div>
             </div>
