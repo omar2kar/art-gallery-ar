@@ -106,3 +106,89 @@
     border-color: transparent;
     font-weight: 700;
 }
+
+/* ============================================
+   تجاوب عام + لوحة الفنان
+   ============================================ */
+
+/* تقليل الحشو على الجوال */
+@media (max-width: 640px) {
+    .page-wrapper {
+        padding: 5rem 1rem 2rem;
+    }
+}
+
+/* ---- لوحة الفنان: شبكة عمودين تتحوّل لعمود واحد على الجوال ---- */
+.artist-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: 2rem;
+    align-items: start;
+}
+
+@media (max-width: 860px) {
+    .artist-grid {
+        grid-template-columns: 1fr;
+        /* عمود واحد على الشاشات الصغيرة */
+        gap: 1.5rem;
+    }
+}
+
+/* بطاقة إحصائية */
+.stat-card {
+    background: linear-gradient(135deg, rgba(201, 168, 76, 0.12), rgba(201, 168, 76, 0.03));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.stat-num {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+}
+
+/* منطقة رفع الصورة المحسّنة */
+.upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 2rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    display: block;
+    transition: all 0.25s;
+    background: var(--surface2);
+}
+
+.upload-zone:hover {
+    border-color: var(--accent);
+    background: rgba(201, 168, 76, 0.05);
+}
+
+/* صف لوحة في القائمة — تحسين الجوال */
+.mine-row {
+    display: flex;
+    gap: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.8rem;
+    align-items: center;
+    transition: border-color 0.25s, transform 0.25s;
+}
+
+.mine-row:hover {
+    border-color: var(--accent);
+    transform: translateX(-3px);
+}
+
+@media (max-width: 420px) {
+    .mine-row {
+        gap: 0.7rem;
+        padding: 0.6rem;
+    }
+}

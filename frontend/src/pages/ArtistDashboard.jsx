@@ -27,7 +27,6 @@ export default function ArtistDashboard() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
-  // حماية: لو ليس فناناً/أدمن، أعِده للرئيسية
   useEffect(() => {
     if (!user || (user.role !== "artist" && user.role !== "admin")) {
       navigate("/");
@@ -77,6 +76,7 @@ export default function ArtistDashboard() {
       setFile(null);
       setPreview(null);
       loadMine();
+      setTimeout(() => setMsg(""), 3000);
     } catch (e2) {
       setErr(e2.response?.data?.message || "Bir hata oluştu");
     } finally {
@@ -94,35 +94,64 @@ export default function ArtistDashboard() {
     }
   }
 
+  const totalValue = mine.reduce((s, p) => s + Number(p.price || 0), 0);
+
   return (
     <div className="page-wrapper">
-      <h1 className="section-title" style={{ marginBottom: "0.3rem" }}>
-        Sanatçı <span>Paneli</span>
-      </h1>
-      <p style={{ color: "var(--muted)", marginBottom: "2.5rem" }}>
-        Hoş geldin, {user?.name} — tablolarını buradan yönet
-      </p>
+      {/* رأس الصفحة */}
+      <div className="hero-in" style={{ marginBottom: "2rem" }}>
+        <h1 className="section-title" style={{ marginBottom: "0.3rem" }}>
+          Sanatçı <span>Paneli</span>
+        </h1>
+        <p style={{ color: "var(--muted)" }}>
+          Hoş geldin, {user?.name} — tablolarını buradan yönet
+        </p>
+      </div>
 
+      {/* بطاقات إحصائية */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.4fr)",
-          gap: "2rem",
-          alignItems: "start",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: "1rem",
+          marginBottom: "2rem",
         }}
-        className="artist-grid"
       >
+        <div className="stat-card">
+          <span style={{ fontSize: "1.8rem" }}>🖼️</span>
+          <div>
+            <div className="stat-num">{mine.length}</div>
+            <div style={{ color: "var(--muted)", fontSize: "0.82rem" }}>
+              Toplam Tablo
+            </div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <span style={{ fontSize: "1.8rem" }}>💰</span>
+          <div>
+            <div className="stat-num" style={{ fontSize: "1.5rem" }}>
+              {totalValue.toLocaleString("tr-TR")} ₺
+            </div>
+            <div style={{ color: "var(--muted)", fontSize: "0.82rem" }}>
+              Toplam Değer
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* الشبكة الرئيسية */}
+      <div className="artist-grid">
         {/* نموذج الرفع */}
         <div
           style={{
             background: "var(--surface)",
             border: "1px solid var(--border)",
-            borderRadius: 12,
+            borderRadius: 14,
             padding: "1.5rem",
           }}
         >
           <h3 style={{ marginBottom: "1.2rem", fontWeight: 600 }}>
-            🖼️ Yeni Tablo Ekle
+            🖌️ Yeni Tablo Ekle
           </h3>
 
           {msg && <div style={okBox}>{msg}</div>}
@@ -132,8 +161,7 @@ export default function ArtistDashboard() {
             onSubmit={submit}
             style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}
           >
-            {/* رفع الصورة */}
-            <label style={uploadBox}>
+            <label className="upload-zone">
               {preview ? (
                 <img
                   src={preview}
@@ -141,14 +169,19 @@ export default function ArtistDashboard() {
                   style={{
                     width: "100%",
                     borderRadius: 8,
-                    maxHeight: 200,
+                    maxHeight: 220,
                     objectFit: "cover",
                   }}
                 />
               ) : (
-                <span style={{ color: "var(--muted)" }}>
-                  📷 Tablo görselini seç
-                </span>
+                <div>
+                  <div style={{ fontSize: "2rem", marginBottom: "0.4rem" }}>
+                    📷
+                  </div>
+                  <span style={{ color: "var(--muted)" }}>
+                    Tablo görselini seçmek için tıkla
+                  </span>
+                </div>
               )}
               <input
                 type="file"
@@ -164,12 +197,22 @@ export default function ArtistDashboard() {
               onChange={set("title")}
               required
             />
-            <input
-              placeholder="Fiyat (₺)"
-              type="number"
-              value={form.price}
-              onChange={set("price")}
-            />
+
+            <div style={{ display: "flex", gap: "0.7rem" }}>
+              <input
+                placeholder="Fiyat (₺)"
+                type="number"
+                value={form.price}
+                onChange={set("price")}
+              />
+              <input
+                placeholder="Yıl"
+                type="number"
+                value={form.year}
+                onChange={set("year")}
+              />
+            </div>
+
             <input
               placeholder="Stil (örn: Empresyonizm)"
               value={form.style}
@@ -181,15 +224,9 @@ export default function ArtistDashboard() {
               onChange={set("medium")}
             />
             <input
-              placeholder="Boyut (örn: 60x80)"
+              placeholder="Boyut (örn: 60x80 cm)"
               value={form.size_cm}
               onChange={set("size_cm")}
-            />
-            <input
-              placeholder="Yıl"
-              type="number"
-              value={form.year}
-              onChange={set("year")}
             />
             <textarea
               placeholder="Açıklama"
@@ -212,18 +249,47 @@ export default function ArtistDashboard() {
           </h3>
 
           {loading ? (
-            <div className="loading">⏳ Yükleniyor...</div>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.8rem",
+              }}
+            >
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="mine-row sk-card">
+                  <div
+                    className="sk"
+                    style={{
+                      width: 90,
+                      height: 68,
+                      borderRadius: 6,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div className="sk sk-line" style={{ width: "60%" }} />
+                    <div className="sk sk-line" style={{ width: "35%" }} />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : mine.length === 0 ? (
             <div
               style={{
-                border: "1px dashed var(--border)",
-                borderRadius: 12,
-                padding: "3rem 1rem",
+                border: "2px dashed var(--border)",
+                borderRadius: 14,
+                padding: "3.5rem 1rem",
                 textAlign: "center",
                 color: "var(--muted)",
               }}
             >
-              Henüz tablo eklemediniz. Soldaki formu kullanın 👈
+              <div style={{ fontSize: "2.5rem", marginBottom: "0.6rem" }}>
+                🎨
+              </div>
+              Henüz tablo eklemediniz.
+              <br />
+              Formu kullanarak ilk tablonu ekle!
             </div>
           ) : (
             <div
@@ -233,18 +299,11 @@ export default function ArtistDashboard() {
                 gap: "0.8rem",
               }}
             >
-              {mine.map((p) => (
+              {mine.map((p, i) => (
                 <div
                   key={p.id}
-                  style={{
-                    display: "flex",
-                    gap: "1rem",
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 10,
-                    padding: "0.7rem",
-                    alignItems: "center",
-                  }}
+                  className="mine-row fade-up"
+                  style={{ animationDelay: `${Math.min(i * 60, 400)}ms` }}
                 >
                   <img
                     src={
@@ -257,15 +316,29 @@ export default function ArtistDashboard() {
                       width: 90,
                       height: 68,
                       objectFit: "cover",
-                      borderRadius: 6,
+                      borderRadius: 8,
                       flexShrink: 0,
                     }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, marginBottom: "0.2rem" }}>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        marginBottom: "0.2rem",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       {p.title}
                     </div>
-                    <div style={{ color: "var(--accent)", fontSize: "0.9rem" }}>
+                    <div
+                      style={{
+                        color: "var(--accent)",
+                        fontSize: "0.9rem",
+                        fontWeight: 700,
+                      }}
+                    >
                       {Number(p.price).toLocaleString("tr-TR")} ₺
                     </div>
                     {p.style && (
@@ -284,10 +357,11 @@ export default function ArtistDashboard() {
                       background: "rgba(224,85,85,0.1)",
                       border: "1px solid var(--danger)",
                       color: "var(--danger)",
-                      borderRadius: 6,
-                      padding: "0.4rem 0.7rem",
-                      fontSize: "0.9rem",
+                      borderRadius: 8,
+                      padding: "0.5rem 0.7rem",
+                      fontSize: "0.95rem",
                       flexShrink: 0,
+                      cursor: "pointer",
                     }}
                   >
                     🗑️
@@ -307,7 +381,7 @@ const okBox = {
   border: "1px solid #4ade80",
   color: "#4ade80",
   padding: "0.6rem 1rem",
-  borderRadius: 6,
+  borderRadius: 8,
   marginBottom: "1rem",
   fontSize: "0.88rem",
 };
@@ -316,15 +390,7 @@ const errBox = {
   border: "1px solid var(--danger)",
   color: "var(--danger)",
   padding: "0.6rem 1rem",
-  borderRadius: 6,
+  borderRadius: 8,
   marginBottom: "1rem",
   fontSize: "0.88rem",
-};
-const uploadBox = {
-  border: "1px dashed var(--border)",
-  borderRadius: 8,
-  padding: "1.2rem",
-  textAlign: "center",
-  cursor: "pointer",
-  display: "block",
 };
