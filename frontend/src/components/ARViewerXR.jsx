@@ -13,7 +13,7 @@ import ARViewer from "./ARViewer"; // النسخة القديمة (Canvas) — �
 
 const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
 const ACCENT = 0xc9a84c; // نفس لون الإطار الذهبي في مشروعك
-const VERSION = "AR v13"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
+const VERSION = "AR v14"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
 
 export default function ARViewerXR({ painting, onClose }) {
   const overlayRef = useRef(null);
@@ -284,48 +284,38 @@ export default function ARViewerXR({ painting, onClose }) {
         group.visible = true;
       };
 
-      // ── دالة وضع موحّدة (منطق Artmajeur) ──
-      // كل وضع جدار (حقيقي أو محسوب) يُثبّت اللوحة على "مستوى الجدار" بارتفاع مريح،
-      // مع نقطة أفقية ثابتة واتجاه ثابت، وأزرار الارتفاع تحرّكها صعوداً/نزولاً على الجدار.
-      const WALL_HEIGHT_DEFAULT = 1.45; // ارتفاع مركز اللوحة (مستوى النظر تقريباً)
-      let wallAnchorXZ = null; // الموضع الأفقي (x,z) على الجدار
-      let wallNormalFlat = null; // اتجاه الجدار الأفقي (اللوحة تواجهه)
-      let wallActive = false; // هل نحن في وضع جدار؟
+      // ── دالة وضع موحّدة ──
+      // نضع اللوحة عند نقطة النقر الفعلية، ونوجّهها لتلتصق بالجدار باتجاهه الحقيقي
+      // (نفس منطق توجيه الحلقة التي تظهر ملتصقة صحيحة).
+      let wallPoint = null; // نقطة النقر على الجدار (x,y,z)
+      let wallNormal = null; // اتجاه الجدار الحقيقي (يواجه المستخدم)
+      let wallActive = false;
 
       const applyWallPlacement = (height) => {
-        if (!wallNormalFlat || !wallAnchorXZ) return;
-        group.position.set(wallAnchorXZ.x, height, wallAnchorXZ.z);
-        const yaw = Math.atan2(wallNormalFlat.x, wallNormalFlat.z);
-        group.rotation.set(0, yaw, 0);
-        group.position.add(wallNormalFlat.clone().multiplyScalar(0.02));
+        if (!wallNormal || !wallPoint) return;
+        group.position.set(wallPoint.x, height, wallPoint.z);
+        // اللوحة (محتواها على +Z) تنظر باتجاه الـ normal → تلتصق بمستوى الجدار
+        const look = group.position.clone().add(wallNormal);
+        group.up.set(0, 1, 0);
+        group.lookAt(look);
+        // ادفعها 2 سم عن الجدار لتفادي التداخل
+        group.position.add(wallNormal.clone().multiplyScalar(0.02));
         group.visible = true;
       };
 
       const placeAt = async (info, hit) => {
-        const xrCam = renderer.xr.getCamera();
-        const camPos = new THREE.Vector3().setFromMatrixPosition(
-          xrCam.matrixWorld,
-        );
-
-        // الاتجاه الأفقي للجدار (نلغي أي ميل رأسي → اللوحة عمودية 100%)
-        let flatNormal = info.normal
+        // اتجاه الجدار الحقيقي، مع تسطيحه أفقياً لضمان لوحة عمودية تماماً
+        const n = info.normal
           ? info.normal.clone()
-          : new THREE.Vector3();
-        flatNormal.y = 0;
-        if (flatNormal.lengthSq() < 1e-6) {
-          // احتياط: اجعلها تواجه المستخدم
-          flatNormal.subVectors(camPos, info.pos);
-          flatNormal.y = 0;
-        }
-        flatNormal.normalize();
-
-        // الموضع الأفقي على الجدار = إسقاط نقطة الإصابة (نتجاهل ارتفاعها)
-        wallAnchorXZ = { x: info.pos.x, z: info.pos.z };
-        wallNormalFlat = flatNormal;
+          : new THREE.Vector3(0, 0, 1);
+        n.y = 0;
+        if (n.lengthSq() < 1e-6) n.set(0, 0, 1);
+        n.normalize();
+        wallNormal = n;
+        wallPoint = info.pos.clone(); // نقطة النقر الفعلية (هنا تظهر اللوحة)
         wallActive = true;
 
-        // الارتفاع الافتراضي: مستوى النظر (لا عند نقطة الإصابة التي قد تكون قرب الأرض)
-        heightRef.current = WALL_HEIGHT_DEFAULT;
+        heightRef.current = info.pos.y; // الارتفاع = حيث ضغطت بالضبط
         applyWallPlacement(heightRef.current);
 
         reticle.visible = false;
@@ -333,21 +323,14 @@ export default function ARViewerXR({ painting, onClose }) {
         setPlaced(true);
         setHint("Tablo duvarda. Yüksekliği ↑↓ ile ayarla");
         anchor = null;
-        if (hit && hit.createAnchor) {
-          try {
-            anchor = await hit.createAnchor();
-          } catch {
-            anchor = null;
-          }
-        }
       };
 
-      // رفع/خفض اللوحة على سطح الجدار — تعمل دائماً في وضع الجدار
+      // رفع/خفض اللوحة على سطح الجدار
       E.adjustHeight = (delta) => {
         if (!wallActive) return;
         heightRef.current = Math.max(
           0.3,
-          Math.min(2.4, heightRef.current + delta),
+          Math.min(2.6, heightRef.current + delta),
         );
         applyWallPlacement(heightRef.current);
       };
@@ -401,7 +384,8 @@ export default function ARViewerXR({ painting, onClose }) {
         group.visible = false;
         anchor = null;
         wallActive = false;
-        wallAnchorXZ = null;
+        wallPoint = null;
+        wallNormal = null;
         setHint(
           'Yeşil halka göründüğünde dokun — veya "Manuel Yerleştir" kullan',
         );
