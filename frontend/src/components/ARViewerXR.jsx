@@ -13,7 +13,7 @@ import ARViewer from "./ARViewer"; // النسخة القديمة (Canvas) — �
 
 const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
 const ACCENT = 0xc9a84c; // نفس لون الإطار الذهبي في مشروعك
-const VERSION = "AR v11"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
+const VERSION = "AR v12"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
 
 export default function ARViewerXR({ painting, onClose }) {
   const overlayRef = useRef(null);
@@ -183,6 +183,7 @@ export default function ARViewerXR({ painting, onClose }) {
           "dom-overlay",
           "local-floor",
           "bounded-floor",
+          "plane-detection",
         ],
         domOverlay: { root: overlayRef.current },
       });
@@ -223,6 +224,7 @@ export default function ARViewerXR({ painting, onClose }) {
       });
 
       let currentHit = null;
+      let currentWall = null; // الجدار الحقيقي المكتشف عبر plane-detection
       let anchor = null;
       let lastReticlePos = new THREE.Vector3();
       let lastIsWall = false;
@@ -359,7 +361,21 @@ export default function ARViewerXR({ painting, onClose }) {
 
       // ── النقر على الشاشة: ضع عند الحلقة (إن ظهرت) ──
       const onSelect = async () => {
-        if (placedRef.current || !reticle.visible || !currentHit) return;
+        if (placedRef.current || !reticle.visible) return;
+        // الأولوية للجدار الحقيقي المكتشف (plane-detection) — التصاق دقيق
+        if (currentWall) {
+          await placeAt(
+            {
+              pos: currentWall.pos.clone(),
+              normal: currentWall.normal.clone(),
+              isWall: true,
+            },
+            null,
+          );
+          return;
+        }
+        // احتياط: hit-test النقطي
+        if (!currentHit) return;
         const pose = currentHit.getPose(localSpace);
         if (!pose) return;
         const info = analyzeSurface(pose.transform.matrix);
@@ -396,52 +412,140 @@ export default function ARViewerXR({ painting, onClose }) {
         );
       };
 
+      // ── اكتشاف الجدار الحقيقي عبر plane-detection ──
+      // نبحث في المستويات العمودية (الجدران) عن الجدار الذي يصطدم به شعاع نظر الكاميرا،
+      // ونعيد نقطة الإصابة الفعلية على سطح الجدار + اتجاهه الحقيقي.
+      const _rayO = new THREE.Vector3();
+      const _rayD = new THREE.Vector3();
+      const _planeM = new THREE.Matrix4();
+      const _planePos = new THREE.Vector3();
+      const _planeQuat = new THREE.Quaternion();
+      const _planeScl = new THREE.Vector3();
+      const _planeNormal = new THREE.Vector3();
+      const _hitP = new THREE.Vector3();
+
+      const findWallHit = (xrFrame, xrCam) => {
+        const planes = xrFrame.detectedPlanes;
+        if (!planes || planes.size === 0) return null;
+
+        // شعاع من الكاميرا للأمام
+        _rayO.setFromMatrixPosition(xrCam.matrixWorld);
+        _rayD.set(0, 0, -1).applyQuaternion(xrCam.quaternion).normalize();
+
+        let best = null;
+        let bestDist = Infinity;
+
+        planes.forEach((plane) => {
+          if (plane.orientation !== "vertical") return; // الجدران فقط
+          const planePose = xrFrame.getPose(plane.planeSpace, localSpace);
+          if (!planePose) return;
+
+          _planeM.fromArray(planePose.transform.matrix);
+          _planeM.decompose(_planePos, _planeQuat, _planeScl);
+          // متجه الجدار (normal) = محور Y لنظام planeSpace
+          _planeNormal.set(0, 1, 0).applyQuaternion(_planeQuat).normalize();
+
+          // تقاطع الشعاع مع مستوى الجدار اللانهائي
+          const denom = _rayD.dot(_planeNormal);
+          if (Math.abs(denom) < 1e-4) return; // الشعاع موازٍ للجدار
+          const diff = _planePos.clone().sub(_rayO);
+          const tHit = diff.dot(_planeNormal) / denom;
+          if (tHit < 0.2 || tHit > 8) return; // خلف الكاميرا أو بعيد جداً
+
+          _hitP.copy(_rayO).add(_rayD.clone().multiplyScalar(tHit));
+
+          // تأكّد أن نقطة الإصابة قريبة من مركز الجدار (ضمن حدوده تقريبياً)
+          const within =
+            _hitP.distanceTo(_planePos) < Math.max(_planeScl.x, 2.5);
+          if (!within) return;
+
+          if (tHit < bestDist) {
+            bestDist = tHit;
+            // الـ normal يواجه الكاميرا
+            const facing =
+              denom < 0 ? _planeNormal.clone() : _planeNormal.clone().negate();
+            best = {
+              pos: _hitP.clone(),
+              normal: facing,
+              isWall: true,
+              real: true,
+            };
+          }
+        });
+        return best;
+      };
+
       // ── حلقة الرسم ──
       let wallSeenCount = 0; // كم مرة رأينا جداراً (لقياس جاهزية التتبّع)
       let floorSeenCount = 0; // كم مرة رأينا سطحاً أفقياً
       renderer.setAnimationLoop((t, xrFrame) => {
         if (xrFrame) {
           if (!placedRef.current) {
-            const hits = xrFrame.getHitTestResults(hitSource);
+            const xrCam = renderer.xr.getCamera();
+            // 1) الأولوية: جدار حقيقي من plane-detection
+            const wallHit = findWallHit(xrFrame, xrCam);
             let poseOk = false;
             let isWall = false;
-            if (hits.length) {
-              currentHit = hits[0];
-              const pose = currentHit.getPose(localSpace);
-              if (pose) {
-                poseOk = true;
-                const info = analyzeSurface(pose.transform.matrix);
-                isWall = info.isWall;
-                lastReticlePos.copy(info.pos);
-                lastIsWall = isWall;
-                reticle.visible = true;
-                reticle.matrix.fromArray(pose.transform.matrix);
-                reticle.material.color.setHex(isWall ? 0x4ade80 : ACCENT);
-                if (isWall) wallSeenCount++;
-                else floorSeenCount++;
-              }
+
+            if (wallHit) {
+              poseOk = true;
+              isWall = true;
+              currentHit = null; // ليس hit-test
+              currentWall = wallHit; // نخزّن الجدار الحقيقي
+              lastReticlePos.copy(wallHit.pos);
+              lastIsWall = true;
+              wallSeenCount++;
+              // ضع الحلقة على الجدار الحقيقي، موجّهة حسب اتجاهه
+              reticle.visible = true;
+              reticle.matrixAutoUpdate = true;
+              reticle.position.copy(wallHit.pos);
+              reticle.lookAt(wallHit.pos.clone().add(wallHit.normal));
+              reticle.material.color.setHex(0x4ade80);
             } else {
-              reticle.visible = false;
-              currentHit = null;
+              currentWall = null;
+              // 2) احتياط: hit-test النقطي (الأرض/أي سطح)
+              reticle.matrixAutoUpdate = false;
+              const hits = xrFrame.getHitTestResults(hitSource);
+              if (hits.length) {
+                currentHit = hits[0];
+                const pose = currentHit.getPose(localSpace);
+                if (pose) {
+                  poseOk = true;
+                  const info = analyzeSurface(pose.transform.matrix);
+                  isWall = info.isWall;
+                  lastReticlePos.copy(info.pos);
+                  lastIsWall = isWall;
+                  reticle.visible = true;
+                  reticle.matrix.fromArray(pose.transform.matrix);
+                  reticle.material.color.setHex(isWall ? 0x4ade80 : ACCENT);
+                  if (isWall) wallSeenCount++;
+                  else floorSeenCount++;
+                }
+              } else {
+                reticle.visible = false;
+                currentHit = null;
+              }
             }
 
             // رسالة + لون الخط المصوّب: طريقة Artmajeur
             const ready = reticle.visible; // سطح مكتشف عند مركز الشاشة = جاهز للوضع
             if (scanRef.current) {
               let msg;
-              if (isWall && reticle.visible) {
+              if (currentWall) {
+                msg = "✅ Gerçek duvar algılandı — dokunarak yerleştir";
+              } else if (isWall && reticle.visible) {
                 msg = "✅ Duvar algılandı — sabitlemek için dokun";
               } else if (reticle.visible) {
                 msg = "👇 Çizgiyi zemin-duvar köşesine hizala ve dokun";
               } else if (floorSeenCount > 0) {
-                msg = "🔍 Telefonu yavaşça sağa-sola hareket ettir…";
+                msg = "🔍 Telefonu duvara doğru yavaşça hareket ettir…";
               } else {
-                msg = "🔍 Kamerayı zemine tut, yavaşça oynat";
+                msg = "🔍 Telefonu yavaşça sağa-sola oynat (duvarı tara)";
               }
               scanRef.current.style.color = ready ? "#4ade80" : "#ffffff";
               scanRef.current.textContent = msg;
             }
-            // الخط يتحوّل للأخضر عند الجاهزية (سطح مكتشف عند المركز)
+            // الخط يتحوّل للأخضر عند الجاهزية (جدار حقيقي أو سطح مكتشف)
             if (aimLineRef.current) {
               aimLineRef.current.style.background = ready
                 ? "rgba(74,222,128,0.95)"
@@ -449,7 +553,13 @@ export default function ARViewerXR({ painting, onClose }) {
             }
 
             if (debugRef.current) {
-              debugRef.current.textContent = `${hits.length} yüzey | ${poseOk ? (isWall ? "duvar ✓" : "zemin") : "—"}`;
+              debugRef.current.textContent = currentWall
+                ? "Gerçek duvar ✓ (plane)"
+                : poseOk
+                  ? isWall
+                    ? "duvar ✓"
+                    : "zemin"
+                  : "taranıyor…";
             }
           } else if (anchor && anchor.anchorSpace) {
             const ap = xrFrame.getPose(anchor.anchorSpace, localSpace);
