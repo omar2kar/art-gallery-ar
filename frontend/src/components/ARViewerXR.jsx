@@ -13,7 +13,7 @@ import ARViewer from "./ARViewer"; // النسخة القديمة (Canvas) — �
 
 const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
 const ACCENT = 0xc9a84c; // نفس لون الإطار الذهبي في مشروعك
-const VERSION = "AR v10"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
+const VERSION = "AR v11"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
 
 export default function ARViewerXR({ painting, onClose }) {
   const overlayRef = useRef(null);
@@ -36,6 +36,7 @@ export default function ARViewerXR({ painting, onClose }) {
   const showFrameRef = useRef(true);
   const debugRef = useRef(null); // عنصر يعرض تشخيص hit-test حيّاً
   const scanRef = useRef(null); // عنصر يعرض حالة مسح الغرفة
+  const aimLineRef = useRef(null); // خط التصويب الأفقي (طريقة Artmajeur)
 
   // ---- 1) فحص دعم WebXR AR على هذا الجهاز ----
   // ملاحظة: لا نرتدّ للنسخة القديمة لمجرد أن isSessionSupported أرجع false،
@@ -424,24 +425,27 @@ export default function ARViewerXR({ painting, onClose }) {
               currentHit = null;
             }
 
-            // رسالة إرشاد: طريقة Artmajeur — اكتشف الأرض ثم انقر عند التقائها بالجدار
+            // رسالة + لون الخط المصوّب: طريقة Artmajeur
+            const ready = reticle.visible; // سطح مكتشف عند مركز الشاشة = جاهز للوضع
             if (scanRef.current) {
               let msg;
               if (isWall && reticle.visible) {
-                msg = "✅ Duvar algılandı — tabloyu sabitlemek için dokun";
-                scanRef.current.style.color = "#4ade80";
+                msg = "✅ Duvar algılandı — sabitlemek için dokun";
               } else if (reticle.visible) {
-                msg = "👇 Daireyi zemin-duvar köşesine getir ve dokun";
-                scanRef.current.style.color = "#4ade80";
+                msg = "👇 Çizgiyi zemin-duvar köşesine hizala ve dokun";
               } else if (floorSeenCount > 0) {
                 msg = "🔍 Telefonu yavaşça sağa-sola hareket ettir…";
-                scanRef.current.style.color = "#ffffff";
               } else {
-                msg =
-                  "🔍 Kamerayı zemine tut, telefonu yavaşça sağa-sola oynat";
-                scanRef.current.style.color = "#ffffff";
+                msg = "🔍 Kamerayı zemine tut, yavaşça oynat";
               }
+              scanRef.current.style.color = ready ? "#4ade80" : "#ffffff";
               scanRef.current.textContent = msg;
+            }
+            // الخط يتحوّل للأخضر عند الجاهزية (سطح مكتشف عند المركز)
+            if (aimLineRef.current) {
+              aimLineRef.current.style.background = ready
+                ? "rgba(74,222,128,0.95)"
+                : "rgba(255,255,255,0.85)";
             }
 
             if (debugRef.current) {
@@ -733,39 +737,83 @@ export default function ARViewerXR({ painting, onClose }) {
               </div>
             )}
 
-            {/* رسالة إرشاد المسح الديناميكية — ترشد المستخدم خطوة بخطوة */}
+            {/* === خط التصويب (طريقة Artmajeur) === */}
+            {/* خط أفقي ثابت وسط الشاشة، يحاذيه المستخدم مع التقاء الأرض بالجدار */}
             {!placed && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "42%",
-                  left: "50%",
-                  transform: "translate(-50%,-50%)",
-                  textAlign: "center",
-                  width: "80%",
-                  maxWidth: 320,
-                }}
-              >
-                <div style={{ fontSize: "2rem", marginBottom: "0.6rem" }}>
-                  🎯
-                </div>
-                <p
-                  ref={scanRef}
+              <>
+                {/* التعليمة فوق الخط */}
+                <div
                   style={{
-                    margin: 0,
-                    color: "white",
-                    fontSize: "1rem",
-                    lineHeight: 1.6,
-                    background: "rgba(0,0,0,0.6)",
-                    padding: "0.7rem 1rem",
-                    borderRadius: 14,
-                    border: "1px dashed rgba(201,168,76,0.7)",
-                    textShadow: "0 1px 4px rgba(0,0,0,0.9)",
+                    position: "absolute",
+                    top: "calc(50% - 70px)",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    textAlign: "center",
+                    width: "85%",
+                    maxWidth: 340,
+                    pointerEvents: "none",
                   }}
                 >
-                  🔍 Kamerayı zemine tut, odayı taramak için yavaşça oynat
-                </p>
-              </div>
+                  <p
+                    ref={scanRef}
+                    style={{
+                      margin: 0,
+                      color: "white",
+                      fontSize: "0.95rem",
+                      lineHeight: 1.6,
+                      background: "rgba(0,0,0,0.6)",
+                      padding: "0.6rem 1rem",
+                      borderRadius: 12,
+                      textShadow: "0 1px 4px rgba(0,0,0,0.9)",
+                    }}
+                  >
+                    🔍 Kamerayı zemine tut, telefonu yavaşça oynat
+                  </p>
+                </div>
+
+                {/* الخط الأفقي المصوّب */}
+                <div
+                  ref={aimLineRef}
+                  style={{
+                    position: "absolute",
+                    top: "50%",
+                    left: "50%",
+                    transform: "translate(-50%,-50%)",
+                    width: "78%",
+                    maxWidth: 420,
+                    height: 3,
+                    borderRadius: 2,
+                    background: "rgba(255,255,255,0.85)",
+                    boxShadow: "0 0 8px rgba(0,0,0,0.6)",
+                    pointerEvents: "none",
+                    transition: "background 0.2s",
+                  }}
+                >
+                  {/* علامتان عند طرفي الخط */}
+                  <span
+                    style={{
+                      position: "absolute",
+                      left: -2,
+                      top: -4,
+                      width: 3,
+                      height: 11,
+                      background: "inherit",
+                      borderRadius: 2,
+                    }}
+                  />
+                  <span
+                    style={{
+                      position: "absolute",
+                      right: -2,
+                      top: -4,
+                      width: 3,
+                      height: 11,
+                      background: "inherit",
+                      borderRadius: 2,
+                    }}
+                  />
+                </div>
+              </>
             )}
 
             {/* شريط سفلي */}
