@@ -1,5 +1,4 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -32,37 +31,47 @@ export default function Navbar() {
         to="/"
         style={{ fontSize: "1.6rem", fontWeight: 300, color: "var(--accent)" }}
       >
-        لوحاتي{" "}
         <span style={{ fontStyle: "italic", color: "var(--accent2)" }}>
-          Gallery
-        </span>
+          Sanat
+        </span>{" "}
+        Galerisi
       </Link>
 
       <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
         <Link to="/" style={{ color: "var(--muted)", fontSize: "0.95rem" }}>
-          المعرض
+          Galeri
         </Link>
+
+        {/* رابط لوحة الفنان */}
+        {user?.role === "artist" && (
+          <Link
+            to="/artist"
+            style={{ color: "var(--muted)", fontSize: "0.95rem" }}
+          >
+            Tablolarım
+          </Link>
+        )}
 
         {user?.role === "admin" && (
           <Link
             to="/admin"
             style={{ color: "var(--muted)", fontSize: "0.95rem" }}
           >
-            الإدارة
+            Yönetim
           </Link>
         )}
 
         {user ? (
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
             <span style={{ color: "var(--accent)", fontSize: "0.9rem" }}>
-              مرحباً {user.name}
+              Merhaba {user.name}
             </span>
             <button
               className="btn-outline"
               style={{ padding: "0.4rem 1rem", fontSize: "0.85rem" }}
               onClick={logout}
             >
-              خروج
+              Çıkış
             </button>
           </div>
         ) : (
@@ -71,7 +80,7 @@ export default function Navbar() {
               className="btn-primary"
               style={{ padding: "0.5rem 1.5rem", fontSize: "0.9rem" }}
             >
-              دخول
+              Giriş
             </button>
           </Link>
         )}
