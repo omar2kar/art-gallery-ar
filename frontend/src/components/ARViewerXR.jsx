@@ -321,7 +321,7 @@ export default function ARViewerXR({ painting, onClose }) {
         reticle.visible = false;
         placedRef.current = true;
         setPlaced(true);
-        setHint("Tablo duvarda. Yüksekliği ↑↓ ile ayarla");
+        setHint("Tablo duvarda. Konumu ⬅️➡️ ve yüksekliği ⬆️⬇️ ile ayarla");
         anchor = null;
       };
 
@@ -332,6 +332,19 @@ export default function ARViewerXR({ painting, onClose }) {
           0.3,
           Math.min(2.6, heightRef.current + delta),
         );
+        applyWallPlacement(heightRef.current);
+      };
+
+      // تحريك اللوحة يمين/يسار على امتداد الجدار.
+      // المماسّ الأفقي للجدار = عمودي على اتجاه الجدار (wallNormal) ضمن المستوى الأفقي،
+      // فنُزيح نقطة التثبيت (wallPoint) على هذا المحور ثم نعيد الوضع.
+      E.adjustSide = (delta) => {
+        if (!wallActive || !wallNormal || !wallPoint) return;
+        const tangent = new THREE.Vector3()
+          .crossVectors(new THREE.Vector3(0, 1, 0), wallNormal)
+          .normalize();
+        if (tangent.lengthSq() < 1e-6) return;
+        wallPoint.add(tangent.multiplyScalar(delta));
         applyWallPlacement(heightRef.current);
       };
 
@@ -566,6 +579,7 @@ export default function ARViewerXR({ painting, onClose }) {
         E.placeManual = null;
         E.resetPlace = null;
         E.adjustHeight = null;
+        E.adjustSide = null;
         E.setBrightness = null;
         onClose && onClose();
       });
@@ -1005,9 +1019,39 @@ export default function ARViewerXR({ painting, onClose }) {
                   </button>
                 )}
 
-                {/* بعد الوضع: أزرار ضبط الارتفاع */}
+                {/* بعد الوضع: أزرار ضبط الموضع (يمين/يسار + ارتفاع) */}
                 {placed && (
                   <>
+                    <button
+                      onClick={() => E.adjustSide && E.adjustSide(-0.1)}
+                      style={{
+                        pointerEvents: "auto",
+                        background: "rgba(255,255,255,0.12)",
+                        border: "1px solid rgba(255,255,255,0.25)",
+                        color: "white",
+                        padding: "0.55rem 0.9rem",
+                        borderRadius: 10,
+                        fontSize: "1rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      ⬅️
+                    </button>
+                    <button
+                      onClick={() => E.adjustSide && E.adjustSide(0.1)}
+                      style={{
+                        pointerEvents: "auto",
+                        background: "rgba(255,255,255,0.12)",
+                        border: "1px solid rgba(255,255,255,0.25)",
+                        color: "white",
+                        padding: "0.55rem 0.9rem",
+                        borderRadius: 10,
+                        fontSize: "1rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      ➡️
+                    </button>
                     <button
                       onClick={() => E.adjustHeight && E.adjustHeight(0.1)}
                       style={{

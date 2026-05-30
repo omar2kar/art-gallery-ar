@@ -32,46 +32,16 @@ export default function Login() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "2rem",
-      }}
-    >
-      <div
-        style={{
-          background: "var(--surface)",
-          border: "1px solid var(--border)",
-          borderRadius: 12,
-          padding: "2.5rem",
-          width: "100%",
-          maxWidth: 420,
-        }}
-      >
-        <h2
-          style={{ marginBottom: "2rem", fontSize: "1.8rem", fontWeight: 400 }}
-        >
-          Giriş <span style={{ color: "var(--accent)" }}>Yap</span>
+    <div className="auth-wrap">
+      <div className="auth-card">
+        <div className="auth-brand">
+          <b>Sanat</b> Galerisi
+        </div>
+        <h2 className="auth-title">
+          Tekrar <span>Hoş Geldin</span>
         </h2>
 
-        {error && (
-          <div
-            style={{
-              background: "rgba(224,85,85,0.1)",
-              border: "1px solid var(--danger)",
-              color: "var(--danger)",
-              padding: "0.7rem 1rem",
-              borderRadius: 6,
-              marginBottom: "1rem",
-              fontSize: "0.9rem",
-            }}
-          >
-            {error}
-          </div>
-        )}
+        {error && <div className="auth-error">{error}</div>}
 
         <form
           onSubmit={handleSubmit}
@@ -96,16 +66,7 @@ export default function Login() {
             <button
               type="button"
               onClick={() => setShowPass(!showPass)}
-              style={{
-                position: "absolute",
-                left: 10,
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                fontSize: "1.1rem",
-                cursor: "pointer",
-              }}
+              className="auth-eye"
               tabIndex={-1}
             >
               {showPass ? "🙈" : "👁️"}
@@ -122,18 +83,8 @@ export default function Login() {
           </button>
         </form>
 
-        <p
-          style={{
-            textAlign: "center",
-            marginTop: "1.5rem",
-            color: "var(--muted)",
-            fontSize: "0.9rem",
-          }}
-        >
-          Hesabınız yok mu?{" "}
-          <Link to="/register" style={{ color: "var(--accent)" }}>
-            Kayıt ol
-          </Link>
+        <p className="auth-foot">
+          Hesabınız yok mu? <Link to="/register">Kayıt ol</Link>
         </p>
       </div>
     </div>

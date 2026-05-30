@@ -1,161 +1,373 @@
 /* ============================================
-   enhancements.css — تحسينات جمالية إضافية
-   استورده مرة واحدة في main.jsx أو App.jsx:
-   import "./enhancements.css";
+   enhancements.css — تحسينات جمالية + الموبايل
    ============================================ */
 
 /* ---- حركة دخول الـ Hero ---- */
 @keyframes heroIn {
-    from {
-        opacity: 0;
-        transform: translateY(16px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
-
-.hero-in {
-    animation: heroIn 0.7s ease both;
-}
+.hero-in { animation: heroIn 0.8s cubic-bezier(.2,.8,.2,1) both; }
 
 /* ---- ظهور متدرّج للبطاقات ---- */
 @keyframes fadeUp {
-    from {
-        opacity: 0;
-        transform: translateY(24px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(26px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
+.fade-up { animation: fadeUp 0.6s cubic-bezier(.2,.8,.2,1) both; }
 
-.fade-up {
-    animation: fadeUp 0.55s ease both;
-}
-
-/* احترام تفضيل تقليل الحركة */
 @media (prefers-reduced-motion: reduce) {
-
-    .hero-in,
-    .fade-up {
-        animation: none;
-    }
-}
-
-/* ---- هيكل عظمي (skeleton) أثناء التحميل ---- */
-.sk-card {
-    pointer-events: none;
-}
-
-.sk {
-    background: linear-gradient(100deg,
-            var(--surface2) 30%,
-            rgba(201, 168, 76, 0.08) 50%,
-            var(--surface2) 70%);
-    background-size: 200% 100%;
-    animation: shimmer 1.3s infinite;
-    border-radius: 6px;
-}
-
-@keyframes shimmer {
-    from {
-        background-position: 200% 0;
-    }
-
-    to {
-        background-position: -200% 0;
-    }
-}
-
-.sk-img {
-    width: 100%;
-    aspect-ratio: 4 / 3;
-    border-radius: 0;
-}
-
-.sk-line {
-    height: 13px;
-    margin-bottom: 0.5rem;
-}
-
-/* ---- أزرار الفلترة (chips) ---- */
-.chip {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    color: var(--muted);
-    padding: 0.4rem 1rem;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    transition: all 0.25s;
-}
-
-.chip:hover {
-    color: var(--text);
-    border-color: var(--accent);
-}
-
-.chip-active {
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: #0a0a0f;
-    border-color: transparent;
-    font-weight: 700;
+    .hero-in, .fade-up, .sk { animation: none !important; }
+    html { scroll-behavior: auto; }
 }
 
 /* ============================================
-   تجاوب عام + لوحة الفنان
+   Navbar
    ============================================ */
+.nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    height: var(--nav-h);
+    display: flex;
+    align-items: center;
+    background: rgba(8, 8, 12, 0.72);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border-bottom: 1px solid var(--border-soft);
+    transition: background 0.3s, border-color 0.3s;
+}
+.nav.scrolled {
+    background: rgba(8, 8, 12, 0.92);
+    border-bottom-color: var(--border);
+}
+.nav-inner {
+    width: 100%;
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+.brand {
+    font-family: var(--display);
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+.brand b { color: var(--accent); font-style: italic; font-weight: 500; }
 
-/* تقليل الحشو على الجوال */
-@media (max-width: 640px) {
-    .page-wrapper {
-        padding: 5rem 1rem 2rem;
-    }
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: 1.8rem;
+}
+.nav-link {
+    color: var(--muted);
+    font-size: 0.95rem;
+    font-weight: 500;
+    position: relative;
+    padding: 0.2rem 0;
+    transition: color 0.25s;
+}
+.nav-link::after {
+    content: "";
+    position: absolute;
+    left: 0; bottom: -2px;
+    height: 1.5px; width: 0;
+    background: var(--accent);
+    transition: width 0.3s;
+}
+.nav-link:hover { color: var(--text); }
+.nav-link:hover::after { width: 100%; }
+
+.nav-user {
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 500;
 }
 
-/* ---- لوحة الفنان: شبكة عمودين تتحوّل لعمود واحد على الجوال ---- */
+/* أيقونات السلة/المفضّلة مع شارة العدد */
+.nav-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    transition: background 0.2s, transform 0.2s;
+}
+.nav-icon:hover { background: var(--surface2); transform: translateY(-1px); }
+.nav-badge {
+    position: absolute;
+    top: -3px; right: -3px;
+    min-width: 18px; height: 18px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: var(--accent);
+    color: #08080c;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+
+/* زر الهامبرغر */
+.hamburger {
+    display: none;
+    width: 42px; height: 42px;
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    background: var(--surface2);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+.hamburger span {
+    display: block;
+    width: 18px; height: 2px;
+    background: var(--text);
+    border-radius: 2px;
+    transition: transform 0.3s, opacity 0.3s;
+}
+.hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+/* درج الموبايل */
+.nav-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+    z-index: 90;
+    opacity: 0;
+    animation: fadeBackdrop 0.25s ease forwards;
+}
+@keyframes fadeBackdrop { to { opacity: 1; } }
+
+.drawer {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: min(82vw, 320px);
+    z-index: 95;
+    background: linear-gradient(180deg, var(--surface), var(--bg));
+    border-left: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    padding: calc(var(--nav-h) + 1rem) 1.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    transform: translateX(100%);
+    animation: slideIn 0.3s cubic-bezier(.2,.8,.2,1) forwards;
+}
+@keyframes slideIn { to { transform: translateX(0); } }
+
+.drawer-link {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    color: var(--text);
+    font-size: 1.05rem;
+    font-weight: 500;
+    padding: 0.9rem 0.6rem;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s;
+}
+.drawer-link:hover, .drawer-link:active { background: var(--accent-dim); }
+.drawer-divider { height: 1px; background: var(--border-soft); margin: 0.6rem 0; }
+
+@media (max-width: 760px) {
+    .nav-links { display: none; }
+    .hamburger { display: flex; }
+}
+
+/* ============================================
+   هيكل عظمي (skeleton)
+   ============================================ */
+.sk-card { pointer-events: none; }
+.sk {
+    background: linear-gradient(100deg,
+            var(--surface2) 30%,
+            rgba(212, 175, 106, 0.10) 50%,
+            var(--surface2) 70%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 6px;
+}
+@keyframes shimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+}
+.sk-img { width: 100%; aspect-ratio: 4 / 5; border-radius: 0; }
+.sk-line { height: 13px; margin-bottom: 0.5rem; }
+
+/* ============================================
+   أزرار الفلترة (chips)
+   ============================================ */
+.chip {
+    background: var(--surface2);
+    border: 1px solid var(--border-soft);
+    color: var(--muted);
+    padding: 0.45rem 1.1rem;
+    border-radius: 30px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: all 0.25s;
+}
+.chip:hover { color: var(--text); border-color: var(--accent); }
+.chip-active {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #1a1408;
+    border-color: transparent;
+    font-weight: 700;
+    box-shadow: 0 6px 18px rgba(212, 175, 106, 0.28);
+}
+
+/* شريط فلترة قابل للتمرير أفقياً على الموبايل */
+.filter-scroll {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.3rem;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+}
+.filter-scroll::-webkit-scrollbar { display: none; }
+
+/* ============================================
+   صفحة تفاصيل اللوحة
+   ============================================ */
+.detail-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 3rem;
+    align-items: start;
+}
+.detail-img { position: sticky; top: calc(var(--nav-h) + 1.5rem); }
+@media (max-width: 860px) {
+    .detail-grid { grid-template-columns: 1fr; gap: 1.8rem; }
+    .detail-img { position: static; }
+}
+
+/* ============================================
+   صفحات الدخول / التسجيل
+   ============================================ */
+.auth-wrap {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: calc(var(--nav-h) + 1.5rem) 1.2rem 2.5rem;
+    position: relative;
+    overflow: hidden;
+}
+/* توهّج ذهبي ناعم في الخلفية */
+.auth-wrap::before {
+    content: "";
+    position: absolute;
+    top: -10%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(680px, 90vw);
+    height: 420px;
+    background: radial-gradient(ellipse at center, rgba(212,175,106,0.16), transparent 70%);
+    filter: blur(50px);
+    pointer-events: none;
+}
+.auth-card {
+    position: relative;
+    z-index: 1;
+    background: linear-gradient(180deg, var(--surface), var(--bg-soft));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2.5rem 2.2rem;
+    width: 100%;
+    max-width: 430px;
+    box-shadow: var(--shadow-lg);
+    animation: fadeUp 0.6s cubic-bezier(.2,.8,.2,1) both;
+}
+.auth-brand {
+    font-family: var(--display);
+    font-size: 1.4rem;
+    text-align: center;
+    color: var(--text);
+    margin-bottom: 0.4rem;
+}
+.auth-brand b { color: var(--accent); font-style: italic; font-weight: 500; }
+.auth-title {
+    font-family: var(--display);
+    font-size: 1.9rem;
+    font-weight: 500;
+    text-align: center;
+    margin-bottom: 1.8rem;
+}
+.auth-title span { color: var(--accent); font-style: italic; }
+.auth-eye {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 1.1rem;
+    cursor: pointer;
+    line-height: 1;
+}
+.auth-error {
+    background: rgba(224, 98, 90, 0.1);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    padding: 0.7rem 1rem;
+    border-radius: var(--radius-sm);
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+.auth-foot {
+    text-align: center;
+    margin-top: 1.5rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+.auth-foot a { color: var(--accent); font-weight: 600; }
+@media (max-width: 480px) {
+    .auth-card { padding: 2rem 1.4rem; }
+}
+
+/* ============================================
+   لوحة الفنان
+   ============================================ */
 .artist-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
     gap: 2rem;
     align-items: start;
 }
-
 @media (max-width: 860px) {
-    .artist-grid {
-        grid-template-columns: 1fr;
-        /* عمود واحد على الشاشات الصغيرة */
-        gap: 1.5rem;
-    }
+    .artist-grid { grid-template-columns: 1fr; gap: 1.5rem; }
 }
 
-/* بطاقة إحصائية */
 .stat-card {
-    background: linear-gradient(135deg, rgba(201, 168, 76, 0.12), rgba(201, 168, 76, 0.03));
+    background: linear-gradient(135deg, rgba(212, 175, 106, 0.12), rgba(212, 175, 106, 0.03));
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius);
     padding: 1.2rem 1.5rem;
     display: flex;
     align-items: center;
     gap: 1rem;
 }
+.stat-num { font-size: 2rem; font-weight: 700; color: var(--accent); line-height: 1; }
 
-.stat-num {
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--accent);
-    line-height: 1;
-}
-
-/* منطقة رفع الصورة المحسّنة */
 .upload-zone {
     border: 2px dashed var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius);
     padding: 2rem 1rem;
     text-align: center;
     cursor: pointer;
@@ -163,32 +375,20 @@
     transition: all 0.25s;
     background: var(--surface2);
 }
+.upload-zone:hover { border-color: var(--accent); background: rgba(212, 175, 106, 0.05); }
 
-.upload-zone:hover {
-    border-color: var(--accent);
-    background: rgba(201, 168, 76, 0.05);
-}
-
-/* صف لوحة في القائمة — تحسين الجوال */
 .mine-row {
     display: flex;
     gap: 1rem;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
     padding: 0.8rem;
     align-items: center;
     transition: border-color 0.25s, transform 0.25s;
 }
-
-.mine-row:hover {
-    border-color: var(--accent);
-    transform: translateX(-3px);
-}
+.mine-row:hover { border-color: var(--accent); transform: translateX(-3px); }
 
 @media (max-width: 420px) {
-    .mine-row {
-        gap: 0.7rem;
-        padding: 0.6rem;
-    }
+    .mine-row { gap: 0.7rem; padding: 0.6rem; }
 }

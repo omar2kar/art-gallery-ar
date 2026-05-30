@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 // ملاحظة: localStorage يعمل في مشروعك الحقيقي على المتصفح بشكل طبيعي.
 
 const KEY = "favorite_paintings";
+const EVENT = "favorites-changed"; // حدث داخلي لمزامنة المكوّنات في نفس التبويب
 
 function read() {
   try {
@@ -18,13 +19,18 @@ function read() {
 export default function useFavorites() {
   const [ids, setIds] = useState(read);
 
-  // مزامنة بين التبويبات/المكوّنات
+  // مزامنة بين التبويبات (storage) وداخل نفس التبويب (حدث مخصّص)
   useEffect(() => {
+    const sync = () => setIds(read());
     const onStorage = (e) => {
-      if (e.key === KEY) setIds(read());
+      if (e.key === KEY) sync();
     };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener(EVENT, sync);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(EVENT, sync);
+    };
   }, []);
 
   const persist = useCallback((next) => {
@@ -34,6 +40,8 @@ export default function useFavorites() {
     } catch {
       /* تجاهل أخطاء التخزين */
     }
+    // أبلغ بقية المكوّنات في نفس التبويب (الـ storage event لا يُطلق محلياً)
+    window.dispatchEvent(new Event(EVENT));
   }, []);
 
   const isFav = useCallback((id) => ids.includes(id), [ids]);

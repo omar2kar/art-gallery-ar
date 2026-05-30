@@ -145,40 +145,33 @@ export default function Home() {
         <div
           style={{
             display: "flex",
-            flexWrap: "wrap",
-            gap: "0.5rem",
-            justifyContent: "center",
+            gap: "0.8rem",
             alignItems: "center",
-            marginBottom: "2rem",
+            marginBottom: "2.2rem",
             position: "relative",
             zIndex: 1,
           }}
         >
-          {styles.map((s) => (
-            <button
-              key={s}
-              onClick={() => setStyle(s)}
-              className={style === s ? "chip chip-active" : "chip"}
-            >
-              {s === "all" ? "Tümü" : s}
-            </button>
-          ))}
-
-          <span
-            style={{
-              width: 1,
-              height: 22,
-              background: "var(--border)",
-              margin: "0 0.3rem",
-            }}
-          />
+          {/* الأنماط — تمرير أفقي على الموبايل */}
+          <div className="filter-scroll" style={{ flex: 1 }}>
+            {styles.map((s) => (
+              <button
+                key={s}
+                onClick={() => setStyle(s)}
+                className={style === s ? "chip chip-active" : "chip"}
+              >
+                {s === "all" ? "Tümü" : s}
+              </button>
+            ))}
+          </div>
 
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
             style={{
               width: "auto",
-              padding: "0.4rem 0.8rem",
+              flexShrink: 0,
+              padding: "0.5rem 0.8rem",
               fontSize: "0.85rem",
             }}
           >

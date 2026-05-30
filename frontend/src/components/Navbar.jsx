@@ -1,90 +1,171 @@
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import useCart from "../hooks/useCart";
+import useFavorites from "../hooks/useFavorites";
+
+// أيقونة بشارة عدد — تُستخدم للسلة والمفضّلة
+function IconCount({ to, icon, count, label }) {
+  return (
+    <Link to={to} className="nav-icon" aria-label={label} title={label}>
+      <span style={{ fontSize: "1.25rem", lineHeight: 1 }}>{icon}</span>
+      {count > 0 && <span className="nav-badge">{count > 99 ? "99+" : count}</span>}
+    </Link>
+  );
+}
 
 export default function Navbar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const user = JSON.parse(localStorage.getItem("user") || "null");
+  const { count: cartCount } = useCart();
+  const { count: favCount } = useFavorites();
+  const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  // ظل/خلفية أوضح عند التمرير
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 10);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // أغلق الدرج عند تغيير الصفحة + امنع تمرير الخلفية
+  useEffect(() => setOpen(false), [location.pathname]);
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => (document.body.style.overflow = "");
+  }, [open]);
 
   function logout() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    setOpen(false);
     navigate("/login");
   }
 
   return (
-    <nav
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 100,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "1rem 2rem",
-        background: "rgba(10,10,15,0.9)",
-        backdropFilter: "blur(20px)",
-        borderBottom: "1px solid var(--border)",
-      }}
-    >
-      <Link
-        to="/"
-        style={{ fontSize: "1.6rem", fontWeight: 300, color: "var(--accent)" }}
-      >
-        <span style={{ fontStyle: "italic", color: "var(--accent2)" }}>
-          Sanat
-        </span>{" "}
-        Galerisi
-      </Link>
-
-      <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
-        <Link to="/" style={{ color: "var(--muted)", fontSize: "0.95rem" }}>
-          Galeri
-        </Link>
-
-        {/* رابط لوحة الفنان */}
-        {user?.role === "artist" && (
-          <Link
-            to="/artist"
-            style={{ color: "var(--muted)", fontSize: "0.95rem" }}
-          >
-            Tablolarım
+    <>
+      <nav className={`nav${scrolled ? " scrolled" : ""}`}>
+        <div className="nav-inner">
+          <Link to="/" className="brand">
+            <b>Sanat</b> Galerisi
           </Link>
-        )}
 
-        {user?.role === "admin" && (
-          <Link
-            to="/admin"
-            style={{ color: "var(--muted)", fontSize: "0.95rem" }}
-          >
-            Yönetim
-          </Link>
-        )}
+          {/* روابط سطح المكتب */}
+          <div className="nav-links">
+            <Link to="/" className="nav-link">
+              Galeri
+            </Link>
+            {user?.role === "artist" && (
+              <Link to="/artist" className="nav-link">
+                Tablolarım
+              </Link>
+            )}
+            {user?.role === "admin" && (
+              <Link to="/admin" className="nav-link">
+                Yönetim
+              </Link>
+            )}
 
-        {user ? (
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <span style={{ color: "var(--accent)", fontSize: "0.9rem" }}>
-              Merhaba {user.name}
-            </span>
-            <button
-              className="btn-outline"
-              style={{ padding: "0.4rem 1rem", fontSize: "0.85rem" }}
-              onClick={logout}
-            >
-              Çıkış
-            </button>
+            <IconCount to="/favorites" icon="🤍" count={favCount} label="Favorilerim" />
+            <IconCount to="/cart" icon="🛒" count={cartCount} label="Sepetim" />
+
+            {user ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                <span className="nav-user">Merhaba, {user.name}</span>
+                <button
+                  className="btn-outline"
+                  style={{ padding: "0.45rem 1.1rem", fontSize: "0.85rem" }}
+                  onClick={logout}
+                >
+                  Çıkış
+                </button>
+              </div>
+            ) : (
+              <Link to="/login">
+                <button
+                  className="btn-primary"
+                  style={{ padding: "0.55rem 1.6rem", fontSize: "0.9rem" }}
+                >
+                  Giriş
+                </button>
+              </Link>
+            )}
           </div>
-        ) : (
-          <Link to="/login">
-            <button
-              className="btn-primary"
-              style={{ padding: "0.5rem 1.5rem", fontSize: "0.9rem" }}
-            >
-              Giriş
-            </button>
-          </Link>
-        )}
-      </div>
-    </nav>
+
+          {/* زر القائمة للموبايل */}
+          <button
+            className={`hamburger${open ? " open" : ""}`}
+            aria-label="Menü"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+        </div>
+      </nav>
+
+      {/* درج الموبايل */}
+      {open && (
+        <>
+          <div className="nav-backdrop" onClick={() => setOpen(false)} />
+          <aside className="drawer">
+            {user && (
+              <div
+                style={{
+                  color: "var(--accent)",
+                  fontWeight: 600,
+                  padding: "0.4rem 0.6rem 0.8rem",
+                  fontSize: "1.05rem",
+                }}
+              >
+                Merhaba, {user.name}
+              </div>
+            )}
+
+            <Link to="/" className="drawer-link">
+              🖼️ Galeri
+            </Link>
+            <Link to="/favorites" className="drawer-link">
+              🤍 Favorilerim{favCount > 0 ? ` (${favCount})` : ""}
+            </Link>
+            <Link to="/cart" className="drawer-link">
+              🛒 Sepetim{cartCount > 0 ? ` (${cartCount})` : ""}
+            </Link>
+            {user?.role === "artist" && (
+              <Link to="/artist" className="drawer-link">
+                🎨 Tablolarım
+              </Link>
+            )}
+            {user?.role === "admin" && (
+              <Link to="/admin" className="drawer-link">
+                ⚙️ Yönetim
+              </Link>
+            )}
+
+            <div className="drawer-divider" />
+
+            {user ? (
+              <button
+                className="btn-outline"
+                style={{ width: "100%", padding: "0.85rem" }}
+                onClick={logout}
+              >
+                Çıkış Yap
+              </button>
+            ) : (
+              <Link to="/login" style={{ display: "block" }}>
+                <button className="btn-primary" style={{ width: "100%", padding: "0.9rem" }}>
+                  Giriş Yap
+                </button>
+              </Link>
+            )}
+          </aside>
+        </>
+      )}
+    </>
   );
 }

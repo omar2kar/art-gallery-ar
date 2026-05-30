@@ -31,7 +31,7 @@ export default function AdminDashboard() {
       await api.post("/paintings", fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      setMsg("✅ تمت إضافة اللوحة بنجاح");
+      setMsg("✅ Tablo başarıyla eklendi");
       api.get("/paintings").then((r) => setPaintings(r.data.data));
       setForm({
         title: "",
@@ -45,35 +45,28 @@ export default function AdminDashboard() {
       });
       setImage(null);
     } catch {
-      setMsg("❌ حدث خطأ");
+      setMsg("❌ Bir hata oluştu");
     }
   }
 
   return (
     <div className="page-wrapper">
       <h1 className="section-title" style={{ marginBottom: "2rem" }}>
-        لوحة <span>الإدارة</span>
+        Yönetim <span>Paneli</span>
       </h1>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "2rem",
-          alignItems: "start",
-        }}
-      >
+      <div className="artist-grid">
         {/* Add Painting Form */}
         <div
           style={{
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: "10px",
+            background: "linear-gradient(180deg, var(--surface), var(--bg-soft))",
+            border: "1px solid var(--border-soft)",
+            borderRadius: "var(--radius)",
             padding: "1.5rem",
           }}
         >
-          <h2 style={{ marginBottom: "1.5rem", fontWeight: 500 }}>
-            إضافة لوحة جديدة
+          <h2 style={{ marginBottom: "1.5rem", fontWeight: 600 }}>
+            🖌️ Yeni Tablo Ekle
           </h2>
           {msg && (
             <div
@@ -91,7 +84,7 @@ export default function AdminDashboard() {
             style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}
           >
             <input
-              placeholder="اسم اللوحة *"
+              placeholder="Tablo adı *"
               required
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -100,7 +93,7 @@ export default function AdminDashboard() {
               value={form.artist_id}
               onChange={(e) => setForm({ ...form, artist_id: e.target.value })}
             >
-              <option value="">-- اختر الفنان --</option>
+              <option value="">-- Sanatçı seç --</option>
               {artists.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -108,35 +101,35 @@ export default function AdminDashboard() {
               ))}
             </select>
             <input
-              placeholder="السعر (ريال) *"
+              placeholder="Fiyat (₺) *"
               type="number"
               required
               value={form.price}
               onChange={(e) => setForm({ ...form, price: e.target.value })}
             />
             <input
-              placeholder="الأسلوب (انطباعية، واقعية...)"
+              placeholder="Stil (Empresyonizm, Realizm...)"
               value={form.style}
               onChange={(e) => setForm({ ...form, style: e.target.value })}
             />
             <input
-              placeholder="الخامة (زيت على قماش...)"
+              placeholder="Teknik (Tuval üzerine yağlıboya...)"
               value={form.medium}
               onChange={(e) => setForm({ ...form, medium: e.target.value })}
             />
             <input
-              placeholder="المقاس (مثال: 60x80)"
+              placeholder="Boyut (örn: 60x80 cm)"
               value={form.size_cm}
               onChange={(e) => setForm({ ...form, size_cm: e.target.value })}
             />
             <input
-              placeholder="السنة"
+              placeholder="Yıl"
               type="number"
               value={form.year}
               onChange={(e) => setForm({ ...form, year: e.target.value })}
             />
             <textarea
-              placeholder="وصف اللوحة"
+              placeholder="Tablo açıklaması"
               rows={3}
               value={form.description}
               onChange={(e) =>
@@ -152,7 +145,7 @@ export default function AdminDashboard() {
                   marginBottom: "0.4rem",
                 }}
               >
-                صورة اللوحة
+                Tablo görseli
               </label>
               <input
                 type="file"
@@ -162,15 +155,15 @@ export default function AdminDashboard() {
               />
             </div>
             <button className="btn-primary" type="submit">
-              إضافة اللوحة
+              Tabloyu Ekle
             </button>
           </form>
         </div>
 
         {/* Paintings List */}
         <div>
-          <h2 style={{ marginBottom: "1rem", fontWeight: 500 }}>
-            اللوحات ({paintings.length})
+          <h2 style={{ marginBottom: "1rem", fontWeight: 600 }}>
+            Tablolar ({paintings.length})
           </h2>
           <div
             style={{
@@ -182,25 +175,14 @@ export default function AdminDashboard() {
             }}
           >
             {paintings.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  padding: "0.8rem 1rem",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 500 }}>{p.title}</div>
+              <div key={p.id} className="mine-row">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600 }}>{p.title}</div>
                   <div style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
-                    {p.artist_name} • {Number(p.price).toLocaleString()} ريال
+                    {p.artist_name} • {Number(p.price).toLocaleString("tr-TR")} ₺
                   </div>
                 </div>
-                <span className="badge">{p.style || "بدون أسلوب"}</span>
+                <span className="badge">{p.style || "Stil yok"}</span>
               </div>
             ))}
           </div>
