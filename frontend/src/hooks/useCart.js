@@ -53,6 +53,7 @@ export default function useCart() {
         title: painting.title,
         price: Number(painting.price) || 0,
         image: painting.image || null,
+        has_image: painting.has_image ? 1 : 0,
         artist_name: painting.artist_name || "",
       };
       persist([...items, lite]);

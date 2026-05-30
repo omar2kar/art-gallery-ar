@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import useCart from "../hooks/useCart";
 import useFavorites from "../hooks/useFavorites";
+import Logo from "./Logo";
 
 // أيقونة بشارة عدد — تُستخدم للسلة والمفضّلة
 function IconCount({ to, icon, count, label }) {
@@ -48,8 +49,8 @@ export default function Navbar() {
     <>
       <nav className={`nav${scrolled ? " scrolled" : ""}`}>
         <div className="nav-inner">
-          <Link to="/" className="brand">
-            <b>Sanat</b> Galerisi
+          <Link to="/" className="brand" aria-label="Sanat Galerisi">
+            <Logo size={36} />
           </Link>
 
           {/* روابط سطح المكتب */}

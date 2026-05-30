@@ -10,8 +10,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import * as THREE from "three";
 import { XREstimatedLight } from "three/examples/jsm/webxr/XREstimatedLight.js";
 import ARViewer from "./ARViewer"; // النسخة القديمة (Canvas) — خطة بديلة
-
-const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
+import { paintingImageUrl, IMG_PLACEHOLDER } from "../utils/img";
 const ACCENT = 0xc9a84c; // نفس لون الإطار الذهبي في مشروعك
 const VERSION = "AR v14"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
 
@@ -115,9 +114,7 @@ export default function ARViewerXR({ painting, onClose }) {
       scene.add(reticle);
 
       // ── تحميل صورة اللوحة كـ texture ──
-      const url = painting.image
-        ? `${API}/uploads/${painting.image}`
-        : `https://picsum.photos/seed/${painting.id}/800/600`;
+      const url = paintingImageUrl(painting) || IMG_PLACEHOLDER;
       const loader = new THREE.TextureLoader();
       loader.setCrossOrigin("anonymous");
       let tex = null;
@@ -662,11 +659,7 @@ export default function ARViewerXR({ painting, onClose }) {
             }}
           >
             <img
-              src={
-                painting.image
-                  ? `${API}/uploads/${painting.image}`
-                  : `https://picsum.photos/seed/${painting.id}/400/300`
-              }
+              src={paintingImageUrl(painting) || IMG_PLACEHOLDER}
               alt={painting.title}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />

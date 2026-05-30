@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import useCart from "../hooks/useCart";
-
-const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
+import { paintingImageUrl, IMG_PLACEHOLDER } from "../utils/img";
 
 export default function Cart() {
   const { items, remove, clear, total } = useCart();
@@ -50,9 +49,7 @@ export default function Cart() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
         {items.map((p) => {
-          const imgSrc = p.image
-            ? `${API}/uploads/${p.image}`
-            : `https://picsum.photos/seed/${p.id}/160/160`;
+          const imgSrc = paintingImageUrl(p) || IMG_PLACEHOLDER;
           return (
             <div key={p.id} className="mine-row" style={{ gap: "1rem" }}>
               <Link to={`/painting/${p.id}`} style={{ flexShrink: 0 }}>

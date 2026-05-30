@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-
-const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
+import { paintingImageUrl, IMG_PLACEHOLDER } from "../utils/img";
 
 export default function ARViewer({ painting, onClose }) {
   const canvasRef = useRef(null);
@@ -65,9 +64,7 @@ export default function ARViewer({ painting, onClose }) {
   useEffect(() => {
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.src = painting.image
-      ? `${API}/uploads/${painting.image}`
-      : `https://picsum.photos/seed/${painting.id}/600/450`;
+    img.src = paintingImageUrl(painting) || IMG_PLACEHOLDER;
     img.onload = () => {
       imgRef.current = img;
     };
@@ -501,11 +498,7 @@ export default function ARViewer({ painting, onClose }) {
             }}
           >
             <img
-              src={
-                painting.image
-                  ? `${API}/uploads/${painting.image}`
-                  : `https://picsum.photos/seed/${painting.id}/400/300`
-              }
+              src={paintingImageUrl(painting) || IMG_PLACEHOLDER}
               alt={painting.title}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />

@@ -111,7 +111,7 @@ orders    : id, user_id, painting_id, status
 ```
 Frontend → Netlify   (HTTPS مجاني، يدعم React/Vite)
 Backend  → Render    (Node.js مجاني)
-Database → Filess.io (MySQL مجاني)
+Database → Aiven     (MySQL مُدار — انتقلنا إليه من Filess.io)
 ```
 
 هذا سيتيح:
@@ -125,7 +125,9 @@ Database → Filess.io (MySQL مجاني)
 
 - الملف الرئيسي للـ AR هو `frontend/src/components/ARViewer.jsx`
 - Backend API على `http://192.168.0.145:5000` (IP المحلي — قد يتغير)
-- صور اللوحات تُرفع إلى `backend/uploads/`
+- صور اللوحات تُخزَّن الآن داخل قاعدة البيانات كعمود `LONGBLOB` (image_data + image_mime)
+  وتُقدَّم عبر `GET /api/paintings/:id/image` — لم تعد تُحفظ على القرص في `backend/uploads/`
+  (السبب: قرص النشر مؤقّت ephemeral فكانت الصور تختفي). الأعمدة تُضاف تلقائياً عند إقلاع الخادم.
 - لا تعيد كتابة الكود كاملاً إلا إذا طُلب صراحةً
 - نبّه دائماً إذا كان الحل يتطلب HTTPS أو تغيير في البيئة
 - الأولوية للحلول التي تعمل على localhost أولاً
@@ -134,14 +136,15 @@ Database → Filess.io (MySQL مجاني)
 
 ## متغيرات البيئة المطلوبة (.env في backend)
 
-> ملاحظة: انتقلت قاعدة البيانات من XAMPP المحلي إلى Filess.io السحابية (حسب خطة الـ HTTPS).
+> ملاحظة: قاعدة البيانات الآن على Aiven السحابية (كانت Filess.io قبلها، وXAMPP محلياً في البداية).
 
 ```env
 PORT=5000
-DB_HOST=p1prtn.h.filess.io      # Filess.io — كانت localhost عبر XAMPP سابقاً
-DB_USER=<filess_user>
-DB_PASSWORD=<filess_password>   # ملاحظة: المفتاح اسمه DB_PASSWORD (وليس DB_PASS)
-DB_NAME=artgallery_packideano
+DB_HOST=<aiven_host>            # مثل: mysql-xxxx.aivencloud.com
+DB_PORT=<aiven_port>            # Aiven عادةً منفذ غير 3306
+DB_USER=<aiven_user>
+DB_PASSWORD=<aiven_password>    # ملاحظة: المفتاح اسمه DB_PASSWORD (وليس DB_PASS)
+DB_NAME=<aiven_db_name>
 ```
 
 > الواجهة محلياً: لمعاينة `localhost` نضيف `frontend/.env.local` يحوي

@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
-
-const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
+import { paintingImageUrl, IMG_PLACEHOLDER } from "../utils/img";
 
 const EMPTY = {
   title: "",
@@ -306,11 +305,7 @@ export default function ArtistDashboard() {
                   style={{ animationDelay: `${Math.min(i * 60, 400)}ms` }}
                 >
                   <img
-                    src={
-                      p.image
-                        ? `${API}/uploads/${p.image}`
-                        : `https://picsum.photos/seed/${p.id}/120/90`
-                    }
+                    src={paintingImageUrl(p) || IMG_PLACEHOLDER}
                     alt={p.title}
                     style={{
                       width: 90,

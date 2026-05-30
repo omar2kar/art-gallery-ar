@@ -3,8 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import ARViewer from "../components/ARViewerXR";
 import useCart from "../hooks/useCart";
-
-const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
+import { paintingImageUrl, IMG_PLACEHOLDER } from "../utils/img";
 
 export default function PaintingDetail() {
   const { id } = useParams();
@@ -34,9 +33,7 @@ export default function PaintingDetail() {
       </div>
     );
 
-  const imgSrc = painting.image
-    ? `${API}/uploads/${painting.image}`
-    : `https://picsum.photos/seed/${painting.id}/700/520`;
+  const imgSrc = paintingImageUrl(painting) || IMG_PLACEHOLDER;
 
   return (
     <div className="page-wrapper">

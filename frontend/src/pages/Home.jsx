@@ -48,6 +48,15 @@ export default function Home() {
     return ["all", ...set];
   }, [paintings]);
 
+  // عدد الفنانين الفريدين لعرضه في إحصائيات الواجهة
+  const artistCount = useMemo(
+    () => new Set(paintings.map((p) => p.artist_name).filter(Boolean)).size,
+    [paintings],
+  );
+
+  const scrollToGallery = () =>
+    document.getElementById("galeri")?.scrollIntoView({ behavior: "smooth" });
+
   // بحث + فلتر + ترتيب
   const visible = useMemo(() => {
     const q = search.trim().toLocaleLowerCase("tr-TR");
@@ -85,52 +94,54 @@ export default function Home() {
       />
 
       {/* Hero */}
-      <div
-        style={{
-          textAlign: "center",
-          padding: "2rem 0 3rem",
-          position: "relative",
-          zIndex: 1,
-        }}
-        className="hero-in"
-      >
-        <div
-          style={{
-            fontSize: "0.8rem",
-            letterSpacing: "0.3em",
-            color: "var(--accent)",
-            marginBottom: "1rem",
-            textTransform: "uppercase",
-          }}
-        >
-          ✦ Dijital Sanat Galerisi ✦
+      <header className="hero hero-in">
+        <div className="hero-eyebrow">
+          <span className="hero-eyebrow-line" />
+          Dijital Sanat Galerisi
+          <span className="hero-eyebrow-line" />
         </div>
-        <h1
-          className="section-title"
-          style={{ fontSize: "clamp(2.5rem, 6vw, 4rem)" }}
-        >
-          Her köşede <span>güzelliği</span>
-          <br />
-          keşfedin
+        <h1 className="hero-title">
+          Her köşede <span>güzelliği</span> keşfedin
         </h1>
-        <p
-          style={{
-            color: "var(--muted)",
-            marginTop: "1rem",
-            fontSize: "1.05rem",
-          }}
-        >
-          Tabloları canlı kamera teknolojisiyle evinizin duvarında görün
+        <p className="hero-sub">
+          Sanat eserlerini canlı kamera teknolojisiyle kendi duvarınızda görün,
+          beğendiklerinizi favorilere ekleyin ve koleksiyonunuzu oluşturun.
         </p>
-      </div>
+        <div className="hero-cta">
+          <button className="btn-primary" onClick={scrollToGallery}>
+            Galeriyi Keşfet
+          </button>
+          <a href="#galeri" className="btn-outline">
+            ↓ Eserlere Göz At
+          </a>
+        </div>
+        <div className="hero-stats">
+          <div className="hero-stat">
+            <b>{paintings.length}</b>
+            <span>Eser</span>
+          </div>
+          <div className="hero-stat-sep" />
+          <div className="hero-stat">
+            <b>{artistCount}</b>
+            <span>Sanatçı</span>
+          </div>
+          <div className="hero-stat-sep" />
+          <div className="hero-stat">
+            <b>AR</b>
+            <span>Duvarda Gör</span>
+          </div>
+        </div>
+      </header>
 
       {/* البحث */}
       <div
+        id="galeri"
         style={{
           maxWidth: 500,
           margin: "0 auto 1.2rem",
           position: "relative",
           zIndex: 1,
+          scrollMarginTop: "calc(var(--nav-h) + 1rem)",
         }}
       >
         <input

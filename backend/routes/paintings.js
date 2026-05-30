@@ -4,22 +4,39 @@
 const router = require('express').Router();
 const db = require('../db');
 const multer = require('multer');
-const path = require('path');
 const { authRequired, allowRoles } = require('../middleware/auth');
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
-});
-// قبول الصور فقط + حد أقصى 5 ميغابايت
+// نخزّن الصورة في الذاكرة ثم نكتب بايتاتها في قاعدة البيانات (LONGBLOB)،
+// حتى تبقى الصور دائمة ومشتركة مع قاعدة Aiven ولا تختفي عند إعادة نشر/تشغيل الخادم.
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) cb(null, true);
     else cb(new Error('يُسمح بالصور فقط'));
   },
 });
+
+// تهيئة تلقائية: نضيف عمودي تخزين الصورة إن لم يكونا موجودين (idempotent).
+(async () => {
+  try {
+    const [cols] = await db.query("SHOW COLUMNS FROM paintings LIKE 'image_data'");
+    if (!cols.length) {
+      await db.query(
+        'ALTER TABLE paintings ADD COLUMN image_data LONGBLOB, ADD COLUMN image_mime VARCHAR(100)'
+      );
+      console.log('✅ تمت إضافة عمودي image_data/image_mime لتخزين الصور في قاعدة البيانات');
+    }
+  } catch (err) {
+    console.error('⚠️ تعذّر التحقق من أعمدة تخزين الصور:', err.message);
+  }
+})();
+
+// أعمدة اللوحة دون الـ BLOB الثقيل — مع علم has_image للواجهة
+const PAINTING_COLS =
+  'p.id, p.title, p.artist_id, p.price, p.style, p.medium, p.size_cm, p.year, ' +
+  'p.image, p.description, p.is_available, p.created_at, ' +
+  '(p.image_data IS NOT NULL) AS has_image';
 
 // يُرجع artist_id المرتبط بالمستخدم الحالي (للفنان)
 async function getArtistId(userId) {
@@ -31,7 +48,7 @@ async function getArtistId(userId) {
 router.get('/', async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT p.*, a.name as artist_name, a.photo as artist_photo
+      SELECT ${PAINTING_COLS}, a.name as artist_name, a.photo as artist_photo
       FROM paintings p
       LEFT JOIN artists a ON p.artist_id = a.id
       ORDER BY p.created_at DESC
@@ -49,7 +66,9 @@ router.get('/mine', authRequired, allowRoles('artist', 'admin'), async (req, res
     const artistId = await getArtistId(req.user.id);
     if (!artistId) return res.json({ success: true, data: [] });
     const [rows] = await db.query(
-      'SELECT * FROM paintings WHERE artist_id=? ORDER BY created_at DESC',
+      'SELECT id, title, artist_id, price, style, medium, size_cm, year, image, ' +
+        'description, is_available, created_at, (image_data IS NOT NULL) AS has_image ' +
+        'FROM paintings WHERE artist_id=? ORDER BY created_at DESC',
       [artistId]
     );
     res.json({ success: true, data: rows });
@@ -62,7 +81,7 @@ router.get('/mine', authRequired, allowRoles('artist', 'admin'), async (req, res
 router.get('/:id', async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT p.*, a.name as artist_name, a.bio as artist_bio
+      SELECT ${PAINTING_COLS}, a.name as artist_name, a.bio as artist_bio
       FROM paintings p
       LEFT JOIN artists a ON p.artist_id = a.id
       WHERE p.id = ?
@@ -71,6 +90,22 @@ router.get('/:id', async (req, res) => {
     res.json({ success: true, data: rows[0] });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/paintings/:id/image — تقديم صورة اللوحة المخزّنة في قاعدة البيانات (عام)
+router.get('/:id/image', async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT image_data, image_mime FROM paintings WHERE id=?',
+      [req.params.id]
+    );
+    if (!rows.length || !rows[0].image_data) return res.status(404).end();
+    res.set('Content-Type', rows[0].image_mime || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(rows[0].image_data);
+  } catch {
+    res.status(500).end();
   }
 });
 
@@ -87,11 +122,13 @@ router.post('/', authRequired, allowRoles('artist', 'admin'), upload.single('ima
       return res.status(400).json({ success: false, message: 'لا يوجد ملف فنان مرتبط بحسابك' });
     }
 
-    const image = req.file ? req.file.filename : null;
+    const image = req.file ? req.file.originalname : null;
+    const imageData = req.file ? req.file.buffer : null;
+    const imageMime = req.file ? req.file.mimetype : null;
     const [result] = await db.query(
-      `INSERT INTO paintings (title,artist_id,price,style,medium,size_cm,year,description,image)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
-      [title, artistId, price || 0, style, medium, size_cm, year || null, description, image]
+      `INSERT INTO paintings (title,artist_id,price,style,medium,size_cm,year,description,image,image_data,image_mime)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [title, artistId, price || 0, style, medium, size_cm, year || null, description, image, imageData, imageMime]
     );
     res.json({ success: true, id: result.insertId, message: 'تمت إضافة اللوحة' });
   } catch (err) {

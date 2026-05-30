@@ -1,9 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import useFavorites from "../hooks/useFavorites";
-
-// إصلاح مهم: متغيّر بيئة بدل IP ثابت — وإلا تُحجب الصور على Vercel (Mixed Content)
-const API = import.meta.env.VITE_API_URL || "http://192.168.0.145:5000";
+import { paintingImageUrl, IMG_PLACEHOLDER } from "../utils/img";
 
 export default function PaintingCard({ painting, onARClick }) {
   const navigate = useNavigate();
@@ -14,10 +12,8 @@ export default function PaintingCard({ painting, onARClick }) {
 
   const fav = isFav(painting.id);
 
-  const imgSrc =
-    painting.image && !imgError
-      ? `${API}/uploads/${painting.image}`
-      : `https://picsum.photos/seed/${painting.id}/500/400`;
+  const realUrl = paintingImageUrl(painting);
+  const imgSrc = realUrl && !imgError ? realUrl : IMG_PLACEHOLDER;
 
   const goDetail = () => navigate(`/painting/${painting.id}`);
 
