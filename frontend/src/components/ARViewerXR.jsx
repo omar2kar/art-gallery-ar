@@ -12,7 +12,7 @@ import { XREstimatedLight } from "three/examples/jsm/webxr/XREstimatedLight.js";
 import ARViewer from "./ARViewer"; // النسخة القديمة (Canvas) — خطة بديلة
 import { paintingImageUrl, IMG_PLACEHOLDER } from "../utils/img";
 const ACCENT = 0xc9a84c; // نفس لون الإطار الذهبي في مشروعك
-const VERSION = "AR v14"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
+const VERSION = "AR v15"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
 
 export default function ARViewerXR({ painting, onClose }) {
   const overlayRef = useRef(null);
@@ -318,30 +318,63 @@ export default function ARViewerXR({ painting, onClose }) {
         reticle.visible = false;
         placedRef.current = true;
         setPlaced(true);
-        setHint("Tablo duvarda. Konumu ⬅️➡️ ve yüksekliği ⬆️⬇️ ile ayarla");
+        setHint("Tabloyu parmağınızla sürükleyerek duvarda taşıyın");
         anchor = null;
       };
 
-      // رفع/خفض اللوحة على سطح الجدار
-      E.adjustHeight = (delta) => {
-        if (!wallActive) return;
-        heightRef.current = Math.max(
-          0.3,
-          Math.min(2.6, heightRef.current + delta),
-        );
-        applyWallPlacement(heightRef.current);
-      };
+      // ── تحريك اللوحة باللمس على سطح الجدار (سحب بالإصبع) ──
+      // نطلق شعاعاً من إصبع المستخدم (XRInputSource من نوع "screen") ونقاطعه مع
+      // مستوى الجدار، فتتبع اللوحة موضع الإصبع بسلاسة بدل أزرار الأسهم.
+      const _dragD2 = new THREE.Vector3();
+      const _dragO = new THREE.Vector3();
+      const _dragQ = new THREE.Quaternion();
+      const _dragS = new THREE.Vector3();
+      const _dragHit = new THREE.Vector3();
+      const _dragM = new THREE.Matrix4();
+      let touchDown = false; // هل الإصبع ملامس الآن؟
+      let grabbed = false; // هل بدأ السحب قرب اللوحة (إمساك)؟
 
-      // تحريك اللوحة يمين/يسار على امتداد الجدار.
-      // المماسّ الأفقي للجدار = عمودي على اتجاه الجدار (wallNormal) ضمن المستوى الأفقي،
-      // فنُزيح نقطة التثبيت (wallPoint) على هذا المحور ثم نعيد الوضع.
-      E.adjustSide = (delta) => {
+      const dragOnWall = (xrFrame) => {
         if (!wallActive || !wallNormal || !wallPoint) return;
-        const tangent = new THREE.Vector3()
-          .crossVectors(new THREE.Vector3(0, 1, 0), wallNormal)
-          .normalize();
-        if (tangent.lengthSq() < 1e-6) return;
-        wallPoint.add(tangent.multiplyScalar(delta));
+        // ابحث عن مصدر إدخال اللمس (الإصبع على الشاشة)
+        let screen = null;
+        for (const src of session.inputSources) {
+          if (src.targetRayMode === "screen" && src.targetRaySpace) {
+            screen = src;
+            break;
+          }
+        }
+        // لا لمس الآن → أفلت الإمساك (لتُحسب نقطة جديدة عند اللمسة التالية)
+        if (!screen) {
+          touchDown = false;
+          grabbed = false;
+          return;
+        }
+        const rayPose = xrFrame.getPose(screen.targetRaySpace, localSpace);
+        if (!rayPose) return;
+        _dragM.fromArray(rayPose.transform.matrix);
+        _dragM.decompose(_dragO, _dragQ, _dragS);
+        _dragD2.set(0, 0, -1).applyQuaternion(_dragQ).normalize();
+        // تقاطع شعاع الإصبع مع مستوى الجدار اللانهائي
+        const denom = _dragD2.dot(wallNormal);
+        if (Math.abs(denom) < 1e-4) return;
+        const tHit =
+          wallPoint.clone().sub(_dragO).dot(wallNormal) / denom;
+        if (tHit < 0.05 || tHit > 12) return;
+        _dragHit.copy(_dragO).add(_dragD2.multiplyScalar(tHit));
+        // عند بدء لمسة جديدة: اعتبرها إمساكاً فقط إن بدأت قرب اللوحة
+        if (!touchDown) {
+          touchDown = true;
+          grabbed =
+            _dragHit.distanceTo(group.position) <
+            Math.max(W, H) * 1.6 + 0.25;
+        }
+        if (!grabbed) return;
+        // تتبّع سلس (lerp) لموضع الإصبع على الجدار + حدود ارتفاع منطقية
+        const targetH = Math.max(0.3, Math.min(2.6, _dragHit.y));
+        wallPoint.x += (_dragHit.x - wallPoint.x) * 0.6;
+        wallPoint.z += (_dragHit.z - wallPoint.z) * 0.6;
+        heightRef.current += (targetH - heightRef.current) * 0.6;
         applyWallPlacement(heightRef.current);
       };
 
@@ -412,14 +445,35 @@ export default function ARViewerXR({ painting, onClose }) {
       const _planeScl = new THREE.Vector3();
       const _planeNormal = new THREE.Vector3();
       const _hitP = new THREE.Vector3();
+      const _planeInv = new THREE.Matrix4();
+      const _localHit = new THREE.Vector3();
+
+      // اختبار نقطة داخل مضلّع (إحداثيات فضاء المستوى x,z) — يحدّد حدود الجدار الفعلية بدقّة
+      const pointInPolygon2D = (px, pz, poly) => {
+        let inside = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+          const xi = poly[i].x,
+            zi = poly[i].z;
+          const xj = poly[j].x,
+            zj = poly[j].z;
+          if (
+            zi > pz !== zj > pz &&
+            px < ((xj - xi) * (pz - zi)) / (zj - zi) + xi
+          ) {
+            inside = !inside;
+          }
+        }
+        return inside;
+      };
 
       const findWallHit = (xrFrame, xrCam) => {
         const planes = xrFrame.detectedPlanes;
         if (!planes || planes.size === 0) return null;
 
-        // شعاع من الكاميرا للأمام
+        // شعاع من الكاميرا نحو ما تنظر إليه (اتجاه -Z العالمي — أمتن من quaternion)
         _rayO.setFromMatrixPosition(xrCam.matrixWorld);
-        _rayD.set(0, 0, -1).applyQuaternion(xrCam.quaternion).normalize();
+        xrCam.getWorldDirection(_rayD);
+        _rayD.normalize();
 
         let best = null;
         let bestDist = Infinity;
@@ -437,15 +491,33 @@ export default function ARViewerXR({ painting, onClose }) {
           // تقاطع الشعاع مع مستوى الجدار اللانهائي
           const denom = _rayD.dot(_planeNormal);
           if (Math.abs(denom) < 1e-4) return; // الشعاع موازٍ للجدار
-          const diff = _planePos.clone().sub(_rayO);
-          const tHit = diff.dot(_planeNormal) / denom;
-          if (tHit < 0.2 || tHit > 8) return; // خلف الكاميرا أو بعيد جداً
+          const tHit = _planePos.clone().sub(_rayO).dot(_planeNormal) / denom;
+          if (tHit < 0.2 || tHit > 10) return; // خلف الكاميرا أو بعيد جداً
 
           _hitP.copy(_rayO).add(_rayD.clone().multiplyScalar(tHit));
 
-          // تأكّد أن نقطة الإصابة قريبة من مركز الجدار (ضمن حدوده تقريبياً)
-          const within =
-            _hitP.distanceTo(_planePos) < Math.max(_planeScl.x, 2.5);
+          // فحص دقيق: هل نقطة الإصابة داخل مضلّع الجدار الحقيقي؟
+          // نحوّل النقطة إلى فضاء المستوى (حيث الجدار في مستوى x-z) ثم نختبر الاحتواء.
+          _planeInv.copy(_planeM).invert();
+          _localHit.copy(_hitP).applyMatrix4(_planeInv);
+          const poly = plane.polygon;
+          let within = false;
+          if (poly && poly.length >= 3) {
+            within = pointInPolygon2D(_localHit.x, _localHit.z, poly);
+            if (!within) {
+              // تسامح بسيط قرب الحواف لالتقاط الجدران الكبيرة بسهولة أكبر
+              let maxR = 0;
+              for (let k = 0; k < poly.length; k++) {
+                const r = Math.hypot(poly[k].x, poly[k].z);
+                if (r > maxR) maxR = r;
+              }
+              within = Math.hypot(_localHit.x, _localHit.z) < maxR * 1.08;
+            }
+          } else {
+            within =
+              Math.hypot(_localHit.x, _localHit.z) <
+              Math.max(_planeScl.x, _planeScl.z, 1.5);
+          }
           if (!within) return;
 
           if (tHit < bestDist) {
@@ -480,15 +552,19 @@ export default function ARViewerXR({ painting, onClose }) {
               poseOk = true;
               isWall = true;
               currentHit = null; // ليس hit-test
-              currentWall = wallHit; // نخزّن الجدار الحقيقي
-              lastReticlePos.copy(wallHit.pos);
+              // تنعيم موضع الحلقة (lerp) لتفادي الاهتزاز أثناء تتبّع الجدار،
+              // ونمرّر الموضع المنعّم نفسه إلى الوضع عند اللمس.
+              if (lastIsWall) lastReticlePos.lerp(wallHit.pos, 0.35);
+              else lastReticlePos.copy(wallHit.pos);
               lastIsWall = true;
+              wallHit.pos.copy(lastReticlePos);
+              currentWall = wallHit; // نخزّن الجدار الحقيقي (بالموضع المنعّم)
               wallSeenCount++;
               // ضع الحلقة على الجدار الحقيقي، موجّهة حسب اتجاهه
               reticle.visible = true;
               reticle.matrixAutoUpdate = true;
-              reticle.position.copy(wallHit.pos);
-              reticle.lookAt(wallHit.pos.clone().add(wallHit.normal));
+              reticle.position.copy(lastReticlePos);
+              reticle.lookAt(lastReticlePos.clone().add(wallHit.normal));
               reticle.material.color.setHex(0x4ade80);
             } else {
               currentWall = null;
@@ -550,7 +626,10 @@ export default function ARViewerXR({ painting, onClose }) {
                     : "zemin"
                   : "taranıyor…";
             }
-          } else if (!wallActive && anchor && anchor.anchorSpace) {
+          } else if (wallActive) {
+            // وضع الجدار: اتركوا الإصبع يسحب اللوحة على سطح الجدار
+            dragOnWall(xrFrame);
+          } else if (anchor && anchor.anchorSpace) {
             // تتبّع الأنكور فقط خارج وضع الجدار (حتى لا يلغي ضبط الارتفاع)
             const ap = xrFrame.getPose(anchor.anchorSpace, localSpace);
             if (ap) {
@@ -575,8 +654,6 @@ export default function ARViewerXR({ painting, onClose }) {
         setPlaced(false);
         E.placeManual = null;
         E.resetPlace = null;
-        E.adjustHeight = null;
-        E.adjustSide = null;
         E.setBrightness = null;
         onClose && onClose();
       });
@@ -1010,72 +1087,6 @@ export default function ARViewerXR({ painting, onClose }) {
                   >
                     📌 Duvara Manuel Yerleştir
                   </button>
-                )}
-
-                {/* بعد الوضع: أزرار ضبط الموضع (يمين/يسار + ارتفاع) */}
-                {placed && (
-                  <>
-                    <button
-                      onClick={() => E.adjustSide && E.adjustSide(-0.1)}
-                      style={{
-                        pointerEvents: "auto",
-                        background: "rgba(255,255,255,0.12)",
-                        border: "1px solid rgba(255,255,255,0.25)",
-                        color: "white",
-                        padding: "0.55rem 0.9rem",
-                        borderRadius: 10,
-                        fontSize: "1rem",
-                        cursor: "pointer",
-                      }}
-                    >
-                      ⬅️
-                    </button>
-                    <button
-                      onClick={() => E.adjustSide && E.adjustSide(0.1)}
-                      style={{
-                        pointerEvents: "auto",
-                        background: "rgba(255,255,255,0.12)",
-                        border: "1px solid rgba(255,255,255,0.25)",
-                        color: "white",
-                        padding: "0.55rem 0.9rem",
-                        borderRadius: 10,
-                        fontSize: "1rem",
-                        cursor: "pointer",
-                      }}
-                    >
-                      ➡️
-                    </button>
-                    <button
-                      onClick={() => E.adjustHeight && E.adjustHeight(0.1)}
-                      style={{
-                        pointerEvents: "auto",
-                        background: "rgba(255,255,255,0.12)",
-                        border: "1px solid rgba(255,255,255,0.25)",
-                        color: "white",
-                        padding: "0.55rem 0.9rem",
-                        borderRadius: 10,
-                        fontSize: "1rem",
-                        cursor: "pointer",
-                      }}
-                    >
-                      ⬆️
-                    </button>
-                    <button
-                      onClick={() => E.adjustHeight && E.adjustHeight(-0.1)}
-                      style={{
-                        pointerEvents: "auto",
-                        background: "rgba(255,255,255,0.12)",
-                        border: "1px solid rgba(255,255,255,0.25)",
-                        color: "white",
-                        padding: "0.55rem 0.9rem",
-                        borderRadius: 10,
-                        fontSize: "1rem",
-                        cursor: "pointer",
-                      }}
-                    >
-                      ⬇️
-                    </button>
-                  </>
                 )}
 
                 {/* بعد الوضع: زر إعادة الوضع */}
