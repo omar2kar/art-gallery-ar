@@ -10,6 +10,18 @@ export function paintingImageUrl(painting) {
   return null;
 }
 
+// رابط صورة الفنان المخزّنة في قاعدة البيانات (LONGBLOB).
+// يُرجع null إن لم تكن للفنان صورة — فتُعرض الأحرف الأولى من اسمه كبديل أنيق.
+export function artistPhotoUrl(artist) {
+  if (!artist) return null;
+  if (artist.has_photo) {
+    return `${API}/api/artists/${artist.id}/photo`;
+  }
+  // توافق خلفي: لو كان photo رابطاً كاملاً مخزّناً سابقاً
+  if (artist.photo && /^https?:\/\//.test(artist.photo)) return artist.photo;
+  return null;
+}
+
 // بديل محايد بنفس الثيم الداكن — «لا توجد صورة» بدل صورة عشوائية مضلّلة.
 export const IMG_PLACEHOLDER =
   "data:image/svg+xml;utf8," +

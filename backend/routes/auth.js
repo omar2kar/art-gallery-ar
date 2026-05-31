@@ -98,13 +98,67 @@ router.get('/me', authRequired, async (req, res) => {
     );
     if (!rows.length) return res.status(404).json({ success: false, message: 'غير موجود' });
 
-    // لو فنان، نضيف معرّف الفنان (artist_id) المرتبط
-    let artistId = null;
+    // لو فنان، نضيف معرّف الفنان (artist_id) + نبذته + علم وجود صورة
+    let artist = null;
     if (rows[0].role === 'artist') {
-      const [a] = await db.query('SELECT id FROM artists WHERE user_id=?', [req.user.id]);
-      artistId = a.length ? a[0].id : null;
+      const [a] = await db.query(
+        'SELECT id, bio, (photo_data IS NOT NULL) AS has_photo FROM artists WHERE user_id=?',
+        [req.user.id]
+      );
+      if (a.length) artist = a[0];
     }
-    res.json({ success: true, user: { ...rows[0], artist_id: artistId } });
+    res.json({
+      success: true,
+      user: {
+        ...rows[0],
+        artist_id: artist ? artist.id : null,
+        bio: artist ? artist.bio : null,
+        has_photo: artist ? !!artist.has_photo : false,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// PUT /api/auth/profile — تحديث بيانات الحساب (الاسم + كلمة المرور اختيارياً)
+// الأمان: المستخدم يعدّل حسابه هو فقط (من التوكن، لا من جسم الطلب).
+router.put('/profile', authRequired, async (req, res) => {
+  try {
+    const { name, currentPassword, newPassword } = req.body;
+
+    const [rows] = await db.query('SELECT * FROM users WHERE id=?', [req.user.id]);
+    if (!rows.length) return res.status(404).json({ success: false, message: 'غير موجود' });
+    const me = rows[0];
+
+    // 1) تغيير كلمة المرور (إن طُلب) — يتطلب كلمة المرور الحالية الصحيحة
+    if (newPassword) {
+      if (newPassword.length < 6) {
+        return res.status(400).json({ success: false, message: 'كلمة المرور الجديدة 6 أحرف على الأقل' });
+      }
+      const valid = await bcrypt.compare(currentPassword || '', me.password);
+      if (!valid) {
+        return res.status(400).json({ success: false, message: 'كلمة المرور الحالية غير صحيحة' });
+      }
+      const hashed = await bcrypt.hash(newPassword, 10);
+      await db.query('UPDATE users SET password=? WHERE id=?', [hashed, req.user.id]);
+    }
+
+    // 2) تغيير الاسم (إن طُلب) — نحدّثه في users، وفي artists أيضاً لو فناناً
+    let newName = me.name;
+    if (typeof name === 'string' && name.trim()) {
+      newName = name.trim();
+      await db.query('UPDATE users SET name=? WHERE id=?', [newName, req.user.id]);
+      if (me.role === 'artist') {
+        await db.query('UPDATE artists SET name=? WHERE user_id=?', [newName, req.user.id]);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'تم تحديث الحساب',
+      user: { id: me.id, name: newName, role: me.role },
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

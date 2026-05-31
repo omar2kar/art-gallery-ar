@@ -12,7 +12,79 @@ import { XREstimatedLight } from "three/examples/jsm/webxr/XREstimatedLight.js";
 import ARViewer from "./ARViewer"; // النسخة القديمة (Canvas) — خطة بديلة
 import { paintingImageUrl, IMG_PLACEHOLDER } from "../utils/img";
 const ACCENT = 0xc9a84c; // نفس لون الإطار الذهبي في مشروعك
-const VERSION = "AR v15"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
+const VERSION = "AR v16"; // علامة إصدار — للتأكد من تحميل آخر نسخة (ليست cache)
+
+// ── أنماط الإطارات المتاحة ──
+// كل نمط: لون + خصائص معدنية/خشونة (لمظهر المادة) + سماكة الحافة + العمق.
+// swatch = تدرّج لوني لعرض النمط كزرّ في الواجهة.
+const FRAMES = [
+  { id: "gold",  label: "Altın",      color: 0xc9a84c, metalness: 0.75, roughness: 0.35, border: 0.06, depth: 0.03,  swatch: "linear-gradient(135deg,#e8cd72,#9c7d2f)" },
+  { id: "black", label: "Siyah",      color: 0x141414, metalness: 0.25, roughness: 0.65, border: 0.05, depth: 0.03,  swatch: "linear-gradient(135deg,#3a3a3a,#0a0a0a)" },
+  { id: "white", label: "Beyaz",      color: 0xf2f0ea, metalness: 0.0,  roughness: 0.85, border: 0.05, depth: 0.03,  swatch: "linear-gradient(135deg,#ffffff,#d6d6cc)" },
+  { id: "wood",  label: "Ahşap",      color: 0x6b4423, metalness: 0.0,  roughness: 0.8,  border: 0.07, depth: 0.035, swatch: "linear-gradient(135deg,#9a6233,#4a2d16)" },
+  { id: "silver",label: "Gümüş",      color: 0xc8c8cc, metalness: 0.9,  roughness: 0.25, border: 0.05, depth: 0.03,  swatch: "linear-gradient(135deg,#ededf0,#9a9aa2)" },
+  { id: "none",  label: "Çerçevesiz", color: 0x000000, metalness: 0.0,  roughness: 1.0,  border: 0.0,  depth: 0.0,   swatch: "repeating-linear-gradient(45deg,#222,#222 5px,#333 5px,#333 10px)" },
+];
+const DEFAULT_FRAME = "gold";
+
+// منتقي الإطار — صفّ أزرار بعيّنات لونية. يُستخدم في شاشة البدء وأثناء AR.
+function FrameChooser({ value, onChange, compact }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: compact ? "0.4rem" : "0.55rem",
+        flexWrap: "wrap",
+        justifyContent: "center",
+        pointerEvents: "auto",
+      }}
+    >
+      {FRAMES.map((f) => {
+        const active = value === f.id;
+        return (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => onChange(f.id)}
+            title={f.label}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "0.25rem",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            <span
+              style={{
+                width: compact ? 30 : 38,
+                height: compact ? 30 : 38,
+                borderRadius: 9,
+                background: f.swatch,
+                boxShadow: active
+                  ? "0 0 0 2px #0a0a0f, 0 0 0 4px var(--accent)"
+                  : "0 0 0 1px rgba(255,255,255,0.25)",
+                transition: "box-shadow 0.15s",
+              }}
+            />
+            <span
+              style={{
+                fontSize: "0.62rem",
+                color: active ? "var(--accent)" : "rgba(255,255,255,0.6)",
+                fontWeight: active ? 700 : 400,
+              }}
+            >
+              {f.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function ARViewerXR({ painting, onClose }) {
   const overlayRef = useRef(null);
@@ -26,6 +98,7 @@ export default function ARViewerXR({ painting, onClose }) {
   const [diag, setDiag] = useState(""); // رسالة تشخيص تظهر على الشاشة
   const [forceOld, setForceOld] = useState(false); // خطة بديلة يدوية
   const [brightness, setBrightness] = useState(0.82); // سطوع اللوحة (للواجهة)
+  const [frameId, setFrameId] = useState(DEFAULT_FRAME); // نمط الإطار المختار
 
   // مراجع ثابتة لكائنات three.js (لا تسبب إعادة رسم React)
   const E = useRef({}).current;
@@ -33,6 +106,7 @@ export default function ARViewerXR({ painting, onClose }) {
   const brightnessRef = useRef(0.82); // سطوع اللوحة (يطابق إضاءة الغرفة)
   const placedRef = useRef(false);
   const showFrameRef = useRef(true);
+  const frameRef = useRef(DEFAULT_FRAME); // نمط الإطار الحالي داخل مشهد three
   const debugRef = useRef(null); // عنصر يعرض تشخيص hit-test حيّاً
   const scanRef = useRef(null); // عنصر يعرض حالة مسح الغرفة
   const aimLineRef = useRef(null); // خط التصويب الأفقي (طريقة Artmajeur)
@@ -130,20 +204,11 @@ export default function ARViewerXR({ painting, onClose }) {
       const ratio = tex ? tex.image.height / tex.image.width : 0.75;
       const H = W * ratio;
 
-      // ── مجموعة اللوحة = إطار ذهبي + قماش ──
+      // ── مجموعة اللوحة = قماش + إطار قابل للتبديل ──
       // القماش يبدأ بسطوع مخفّض (0.82) ليندمج مع إضاءة الغرفة بدل أن يبدو مضيئاً ذاتياً.
       // المستخدم يضبطه لاحقاً عبر شريط السطوع.
       const BRIGHT_DEFAULT = 0.82;
       const group = new THREE.Group();
-      const frameMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(W + 0.06, H + 0.06, 0.03),
-        new THREE.MeshStandardMaterial({
-          color: ACCENT,
-          metalness: 0.75,
-          roughness: 0.35,
-        }),
-      );
-      const tint = Math.round(BRIGHT_DEFAULT * 255);
       const canvasMat = new THREE.MeshBasicMaterial({
         map: tex || null,
         color: tex
@@ -156,11 +221,44 @@ export default function ARViewerXR({ painting, onClose }) {
         new THREE.PlaneGeometry(W, H),
         canvasMat,
       );
-      canvasMesh.position.z = 0.0165; // أمام وجه الإطار مباشرة
-      group.add(frameMesh, canvasMesh);
-      group.userData.halfH = (H + 0.06) / 2; // نصف الارتفاع — لرفعها فوق السطح الأفقي
+      group.add(canvasMesh);
+
+      // الإطار قابل لإعادة البناء (لتبديل النمط حياً). نتخلّص من القديم ونبني الجديد.
+      let frameMesh = null;
+      const buildFrame = (id) => {
+        const f = FRAMES.find((x) => x.id === id) || FRAMES[0];
+        frameRef.current = f.id;
+        if (frameMesh) {
+          group.remove(frameMesh);
+          frameMesh.geometry.dispose();
+          frameMesh.material.dispose();
+          frameMesh = null;
+        }
+        if (f.border <= 0) {
+          // بلا إطار: القماش في المقدمة مباشرة
+          canvasMesh.position.z = 0;
+          group.userData.halfH = H / 2;
+          return;
+        }
+        frameMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(W + f.border, H + f.border, f.depth),
+          new THREE.MeshStandardMaterial({
+            color: f.color,
+            metalness: f.metalness,
+            roughness: f.roughness,
+          }),
+        );
+        group.add(frameMesh);
+        canvasMesh.position.z = f.depth / 2 + 0.001; // أمام وجه الإطار مباشرة
+        group.userData.halfH = (H + f.border) / 2; // لرفعها فوق السطح الأفقي
+        frameMesh.visible = showFrameRef.current;
+      };
+      buildFrame(frameRef.current);
       group.visible = false;
       scene.add(group);
+
+      // تبديل نمط الإطار من الواجهة (قبل أو بعد الوضع)
+      E.setFrame = (id) => buildFrame(id);
 
       // التحكّم بسطوع اللوحة (يطابقها مع إضاءة الغرفة)
       E.setBrightness = (val) => {
@@ -639,7 +737,7 @@ export default function ARViewerXR({ painting, onClose }) {
             }
           }
         }
-        frameMesh.visible = showFrameRef.current;
+        if (frameMesh) frameMesh.visible = showFrameRef.current;
         renderer.render(scene, camera);
       });
 
@@ -655,6 +753,7 @@ export default function ARViewerXR({ painting, onClose }) {
         E.placeManual = null;
         E.resetPlace = null;
         E.setBrightness = null;
+        E.setFrame = null;
         onClose && onClose();
       });
 
@@ -755,6 +854,28 @@ export default function ARViewerXR({ painting, onClose }) {
           >
             Tabloyu canlı kamerayla duvarında dene
           </p>
+
+          {/* اختيار الإطار قبل بدء العرض على الجدار */}
+          <div style={{ marginBottom: "1.6rem" }}>
+            <p
+              style={{
+                color: "rgba(255,255,255,0.55)",
+                fontSize: "0.78rem",
+                marginBottom: "0.7rem",
+                letterSpacing: "0.04em",
+              }}
+            >
+              🖼️ Çerçeve Seç
+            </p>
+            <FrameChooser
+              value={frameId}
+              onChange={(id) => {
+                setFrameId(id);
+                frameRef.current = id; // ليبدأ بالإطار المختار عند تشغيل AR
+                E.setFrame && E.setFrame(id); // لو الجلسة جارية بالفعل
+              }}
+            />
+          </div>
 
           {error && (
             <p
@@ -1060,6 +1181,25 @@ export default function ARViewerXR({ painting, onClose }) {
                 </div>
               )}
 
+              {/* اختيار الإطار — أثناء المسح (قبل التثبيت) أو بعد الوضع على الجدار */}
+              <div
+                style={{
+                  background: "rgba(0,0,0,0.5)",
+                  padding: "0.55rem 0.8rem",
+                  borderRadius: 14,
+                  pointerEvents: "auto",
+                }}
+              >
+                <FrameChooser
+                  compact
+                  value={frameId}
+                  onChange={(id) => {
+                    setFrameId(id);
+                    E.setFrame && E.setFrame(id);
+                  }}
+                />
+              </div>
+
               <div
                 style={{
                   display: "flex",
@@ -1108,21 +1248,23 @@ export default function ARViewerXR({ painting, onClose }) {
                   </button>
                 )}
 
-                <button
-                  onClick={toggleFrame}
-                  style={{
-                    pointerEvents: "auto",
-                    background: "rgba(255,255,255,0.12)",
-                    border: `1px solid ${showFrame ? "rgba(201,168,76,0.8)" : "rgba(255,255,255,0.25)"}`,
-                    color: "white",
-                    padding: "0.55rem 1.1rem",
-                    borderRadius: 10,
-                    fontSize: "0.82rem",
-                    cursor: "pointer",
-                  }}
-                >
-                  🖼️ {showFrame ? "Çerçeveyi Gizle" : "Çerçeveyi Göster"}
-                </button>
+                {frameId !== "none" && (
+                  <button
+                    onClick={toggleFrame}
+                    style={{
+                      pointerEvents: "auto",
+                      background: "rgba(255,255,255,0.12)",
+                      border: `1px solid ${showFrame ? "rgba(201,168,76,0.8)" : "rgba(255,255,255,0.25)"}`,
+                      color: "white",
+                      padding: "0.55rem 1.1rem",
+                      borderRadius: 10,
+                      fontSize: "0.82rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    🖼️ {showFrame ? "Çerçeveyi Gizle" : "Çerçeveyi Göster"}
+                  </button>
+                )}
               </div>
             </div>
           </>

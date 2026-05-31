@@ -74,7 +74,14 @@ export default function Navbar() {
 
             {user ? (
               <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                <span className="nav-user">Merhaba, {user.name}</span>
+                <Link
+                  to="/profile"
+                  className="nav-user"
+                  style={{ textDecoration: "none" }}
+                  title="Profilim"
+                >
+                  Merhaba, {user.name}
+                </Link>
                 <button
                   className="btn-outline"
                   style={{ padding: "0.45rem 1.1rem", fontSize: "0.85rem" }}
@@ -115,21 +122,29 @@ export default function Navbar() {
           <div className="nav-backdrop" onClick={() => setOpen(false)} />
           <aside className="drawer">
             {user && (
-              <div
+              <Link
+                to="/profile"
                 style={{
+                  display: "block",
                   color: "var(--accent)",
                   fontWeight: 600,
                   padding: "0.4rem 0.6rem 0.8rem",
                   fontSize: "1.05rem",
+                  textDecoration: "none",
                 }}
               >
-                Merhaba, {user.name}
-              </div>
+                Merhaba, {user.name} →
+              </Link>
             )}
 
             <Link to="/" className="drawer-link">
               🖼️ Galeri
             </Link>
+            {user && (
+              <Link to="/profile" className="drawer-link">
+                👤 Profilim
+              </Link>
+            )}
             <Link to="/favorites" className="drawer-link">
               🤍 Favorilerim{favCount > 0 ? ` (${favCount})` : ""}
             </Link>

@@ -8,6 +8,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import ArtistDashboard from "./pages/ArtistDashboard";
 import Cart from "./pages/Cart";
 import Favorites from "./pages/Favorites";
+import Profile from "./pages/Profile";
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/artist" element={<ArtistDashboard />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/favorites" element={<Favorites />} />
+        <Route path="/profile" element={<Profile />} />
       </Routes>
     </BrowserRouter>
   );
