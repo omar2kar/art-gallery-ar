@@ -111,7 +111,7 @@ orders    : id, user_id, painting_id, status
 ```
 Frontend → Netlify   (HTTPS مجاني، يدعم React/Vite)
 Backend  → Render    (Node.js مجاني)
-Database → Aiven     (MySQL مُدار — انتقلنا إليه من Filess.io)
+Database → Filess.io (MySQL مجاني)
 ```
 
 هذا سيتيح:
@@ -136,15 +136,15 @@ Database → Aiven     (MySQL مُدار — انتقلنا إليه من Filess
 
 ## متغيرات البيئة المطلوبة (.env في backend)
 
-> ملاحظة: قاعدة البيانات الآن على Aiven السحابية (كانت Filess.io قبلها، وXAMPP محلياً في البداية).
+> ملاحظة: قاعدة البيانات على Filess.io السحابية (كانت XAMPP محلياً في البداية).
 
 ```env
 PORT=5000
-DB_HOST=<aiven_host>            # مثل: mysql-xxxx.aivencloud.com
-DB_PORT=<aiven_port>            # Aiven عادةً منفذ غير 3306
-DB_USER=<aiven_user>
-DB_PASSWORD=<aiven_password>    # ملاحظة: المفتاح اسمه DB_PASSWORD (وليس DB_PASS)
-DB_NAME=<aiven_db_name>
+DB_HOST=p1prtn.h.filess.io      # Filess.io — كانت localhost عبر XAMPP سابقاً
+DB_PORT=<filess_port>           # Filess.io يستخدم منفذاً مخصّصاً (غير 3306) — اتركه فارغاً إن كان 3306
+DB_USER=<filess_user>
+DB_PASSWORD=<filess_password>   # ملاحظة: المفتاح اسمه DB_PASSWORD (وليس DB_PASS)
+DB_NAME=artgallery_packideano
 ```
 
 > الواجهة محلياً: لمعاينة `localhost` نضيف `frontend/.env.local` يحوي
